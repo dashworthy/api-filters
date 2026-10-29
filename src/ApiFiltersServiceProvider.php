@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Dashworthy\ApiFilters;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 
 class ApiFiltersServiceProvider extends ServiceProvider
@@ -22,6 +24,11 @@ class ApiFiltersServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->loadTranslationsFrom(__DIR__.'/../lang', 'api-filters');
+
+        Builder::macro('apiFilters', function (mixed $filterSets): Builder {
+            /** @var Builder<Model> $this */
+            return ApiFilters::for($this)->filter($filterSets)->query();
+        });
 
         if (! $this->app->runningInConsole()) {
             return;

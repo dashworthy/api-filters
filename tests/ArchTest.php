@@ -2,7 +2,11 @@
 
 declare(strict_types=1);
 
+use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\ApiFiltersServiceProvider;
+use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
+use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
+use Dashworthy\ApiFilters\Contracts\NormalizerContract;
 
 arch()->preset()->php();
 
@@ -26,12 +30,22 @@ arch('the package source declares strict types')
  |
  | The plugin reports a class that sits directly in the module, so the root
  | entry points are named in ignoring(): the service provider, which
- | composer.json registers, and later the engine that applications import.
+ | composer.json registers, and the engine that applications import.
  */
 arch('every class keeps to the approved directories')
     ->expect('Dashworthy\ApiFilters')
-    ->toUseApprovedDirectories([], beneath: 'Dashworthy\ApiFilters')
-    ->ignoring(ApiFiltersServiceProvider::class);
+    ->toUseApprovedDirectories([
+        'Adapters' => DatabaseAdapterContract::class,
+        'Columns',
+        'Contracts' => fn (string $class): bool => interface_exists($class),
+        'Data' => fn (string $class): bool => (new ReflectionClass($class))->isReadOnly(),
+        'Enums' => UnitEnum::class,
+        'FilterOperations' => FilterOperationContract::class,
+        'Filtering',
+        'Normalizers' => NormalizerContract::class,
+        'Parsing',
+    ], beneath: 'Dashworthy\ApiFilters')
+    ->ignoring([ApiFiltersServiceProvider::class, ApiFilters::class]);
 
 /*
  | ignoring() matches by prefix, so it also passes any class or directory whose
@@ -43,7 +57,7 @@ it('keeps only the entry points at the package root', function () {
     $sourceRoot = dirname(__DIR__).'/src';
 
     expect(array_map(basename(...), glob($sourceRoot.'/*.php') ?: []))
-        ->toEqualCanonicalizing(['ApiFiltersServiceProvider.php'])
+        ->toEqualCanonicalizing(['ApiFilters.php', 'ApiFiltersServiceProvider.php'])
         ->and(glob($sourceRoot.'/ApiFilters*', GLOB_ONLYDIR) ?: [])
         ->toBe([]);
 });
@@ -54,7 +68,15 @@ it('keeps only the entry points at the package root', function () {
  */
 arch('every class is named for its directory')
     ->expect('Dashworthy\ApiFilters')
-    ->toUseDirectorySuffixes([], beneath: 'Dashworthy\ApiFilters');
+    ->toUseDirectorySuffixes([
+        'Adapters' => 'Adapter',
+        'Columns' => 'Resolver',
+        'Contracts' => 'Contract',
+        'Data' => 'Data',
+        'Filtering' => 'Applier',
+        'Normalizers' => 'Normalizer',
+        'Parsing' => 'Parser',
+    ], beneath: 'Dashworthy\ApiFilters');
 
 /*
  | dashworthy/pest-plugin-arch-rails: coverage.

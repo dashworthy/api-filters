@@ -2,28 +2,31 @@
 
 declare(strict_types=1);
 
+use Dashworthy\ApiFilters\Adapters\MariaDbAdapter;
 use Dashworthy\ApiFilters\ApiFiltersServiceProvider;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Translation\FileLoader;
 use Illuminate\Translation\Translator;
+use Workbench\App\Models\Order;
 
 mutates(ApiFiltersServiceProvider::class);
 
 it('merges the package config', function () {
-    expect(config('api-filters.placeholder'))->toBe('default');
+    expect(config('api-filters.limits.filter_sets'))->toBe(10)
+        ->and(config('api-filters.adapters'))->toBe(['mariadb' => MariaDbAdapter::class]);
 });
 
 it('keeps a host app value over the package default', function () {
-    config()->set('api-filters.placeholder', 'host');
+    config()->set('api-filters.limits', ['filter_sets' => 3]);
 
     (new ApiFiltersServiceProvider(app()))->register();
 
-    expect(config('api-filters.placeholder'))->toBe('host');
+    expect(config('api-filters.limits'))->toBe(['filter_sets' => 3]);
 });
 
 it('loads the package translations', function () {
-    expect(trans('api-filters::messages.placeholder'))->toBe('ApiFilters placeholder translation.');
+    expect(trans('api-filters::validation.not_filterable'))->toBe('This field cannot be filtered.');
 });
 
 it('loads the translations and publishes nothing outside the console', function () {
@@ -33,7 +36,7 @@ it('loads the translations and publishes nothing outside the console', function 
 
     (new ApiFiltersServiceProvider(app()))->boot();
 
-    expect($translator->get('api-filters::messages.placeholder'))->toBe('ApiFilters placeholder translation.')
+    expect($translator->get('api-filters::validation.not_filterable'))->toBe('This field cannot be filtered.')
         ->and(ServiceProvider::pathsToPublish(ApiFiltersServiceProvider::class))->toBe([]);
 });
 
@@ -61,4 +64,14 @@ it('publishes the config file and translations under the api-filters tag', funct
         config_path('api-filters.php'),
         app()->langPath('vendor/api-filters'),
     ]);
+});
+
+it('filters through the builder macro', function () {
+    Order::factory()->createMany([['code' => 'open', 'status' => 'open'], ['code' => 'closed', 'status' => 'closed']]);
+
+    $orders = Order::query()->apiFilters([
+        ['filter_set_operator' => 'and', 'filters' => [['field' => 'status', 'filter_operator' => 'equals', 'value' => 'open']]],
+    ]);
+
+    expect($orders->pluck('code')->all())->toBe(['open']);
 });
