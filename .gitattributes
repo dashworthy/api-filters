@@ -10,6 +10,7 @@
 /pint.json          export-ignore
 /testbench.yaml     export-ignore
 /workbench          export-ignore
+/art                export-ignore
 /.claude            export-ignore
 /.agents            export-ignore
 /CLAUDE.md          export-ignore
