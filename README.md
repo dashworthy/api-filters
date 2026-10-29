@@ -11,7 +11,7 @@
 Apply API request filters and sorts to Eloquent queries without trusting client-supplied identifiers.
 
 > [!IMPORTANT]
-> 0.x is in early development. Filtering on a model's own columns works; relation filters, sorting and form requests arrive in the next 0.x releases. The API may change before 1.0.
+> 0.x is in early development. Filtering works, through allow-listed relations too; sorting and form requests arrive in the next 0.x releases. The API may change before 1.0.
 
 ## Installation
 
