@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Dashworthy\ApiFilters\FilterOperations\Relations;
 
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Enums\FilterOperator;
-use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Illuminate\Database\Eloquent\Builder;
 use LogicException;
 
@@ -31,10 +29,10 @@ final class DoesntHave implements FilterOperationContract
         return [];
     }
 
-    public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+    public function handle(Builder $query, FilterData $filterData): Builder
     {
         $relation = $filterData->relation ?? throw new LogicException('A doesntHave filter needs a relation path.');
 
-        return $query->has($relation, '<', 1, $filterSetOperator->value);
+        return $query->doesntHave($relation);
     }
 }

@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace Dashworthy\ApiFilters\FilterOperations\Sets;
 
 use Closure;
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Enums\FilterOperator;
-use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Lang;
@@ -44,18 +42,15 @@ final class In implements FilterOperationContract
         ];
     }
 
-    public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+    public function handle(Builder $query, FilterData $filterData): Builder
     {
         $values = $filterData->listValue();
         $listed = array_values(array_filter($values, fn (mixed $value): bool => $value !== null));
 
         if (count($listed) === count($values)) {
-            return $adapter->whereIn($query, $filterData->column, $listed, $filterSetOperator->value);
+            return $query->whereIn($filterData->column, $listed);
         }
 
-        return $query->where(
-            fn (Builder $nested) => $adapter->whereIn($nested, $filterData->column, $listed, 'and')->orWhereNull($filterData->column),
-            boolean: $filterSetOperator->value,
-        );
+        return $query->where(fn (Builder $nested) => $nested->whereIn($filterData->column, $listed)->orWhereNull($filterData->column));
     }
 }

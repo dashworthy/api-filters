@@ -5,16 +5,17 @@ declare(strict_types=1);
 namespace Dashworthy\ApiFilters\Contracts;
 
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * One operator a client can name in a filter's filter_operator. The classes in
- * api-filters.operations are asked in order: the first whose canHandle()
- * accepts a filter checks its value against rules() and adds its condition to
- * the filter set's group, and a filter that none can handle is rejected. The
- * adapter writes any SQL that differs between databases.
+ * One operator a client can name in a filter's filter_operator. Every class in
+ * api-filters.operations whose canHandle() accepts a filter checks its value
+ * against rules(), then adds its condition, and a filter that none can handle
+ * is rejected. The package calls handle() inside a where group of the
+ * filter's own, joined to the rest of its set by the set's operator, and for a
+ * relation field inside that relation's has() query with the column qualified
+ * for the related table, so an operation only writes its own condition.
  */
 interface FilterOperationContract
 {
@@ -34,14 +35,13 @@ interface FilterOperationContract
     public function rules(): array;
 
     /**
-     * Add the filter's condition, joined by the set's operator. The column is
-     * one the package resolved and the value passed rules(); bind the value
-     * rather than writing it into SQL.
+     * Add the filter's condition. The column is one the package resolved and
+     * the value passed rules(); bind the value rather than writing it into SQL.
      *
      * @template TModel of Model
      *
      * @param  Builder<TModel>  $query
      * @return Builder<TModel>
      */
-    public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder;
+    public function handle(Builder $query, FilterData $filterData): Builder;
 }

@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use Dashworthy\ApiFilters\Adapters\MariaDbAdapter;
 use Dashworthy\ApiFilters\ApiFilters;
+use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
@@ -47,8 +47,34 @@ $codes = fn (array $allowedRelations, string $setOperator, array $filters, ?Buil
 
 $filter = fn (string $field, string $operator, mixed $value): array => ['field' => $field, 'filter_operator' => $operator, 'value' => $value];
 
+/*
+ | $either is an operation that ORs two values of a column, to show an OR in an
+ | operation's condition stays within its filter.
+ */
+$either = new class implements FilterOperationContract
+{
+    public function canHandle(FilterData $filterData): bool
+    {
+        return $filterData->operator === 'either';
+    }
+
+    public function rules(): array
+    {
+        return [];
+    }
+
+    public function handle(Builder $query, FilterData $filterData): Builder
+    {
+        [$first, $second] = $filterData->listValue();
+
+        return $query->where($filterData->column, $first)->orWhere($filterData->column, $second);
+    }
+};
+
 it('finds the built-in operation for each operator', function (FilterOperator $operator, string $operation) {
-    expect(filterApplier()->operationFor(new FilterData('orders.notes', $operator->value)))->toBeInstanceOf($operation);
+    expect(filterApplier()->operationsFor(new FilterData('orders.notes', $operator->value)))
+        ->toHaveCount(1)
+        ->sequence(fn ($found) => $found->toBeInstanceOf($operation));
 })->with([
     'equals' => [FilterOperator::Equals, Equals::class],
     'doesNotEquals' => [FilterOperator::DoesNotEquals, DoesNotEqual::class],
@@ -70,22 +96,49 @@ it('finds the built-in operation for each operator', function (FilterOperator $o
 ]);
 
 it('finds no operation for an operator none can handle', function () {
-    expect(filterApplier()->operationFor(new FilterData('orders.total', 'between', [1, 2])))->toBeNull();
+    expect(filterApplier()->operationsFor(new FilterData('orders.total', 'between', [1, 2])))->toBe([]);
 });
 
-it('asks the operations in order', function () {
+it('finds every operation that can handle a filter, in order', function () {
     $first = new Equals;
+    $second = new Equals;
 
-    expect((new FilterApplier(new MariaDbAdapter, [new In, $first, new Equals]))->operationFor(new FilterData('orders.status', 'equals', 'open')))
-        ->toBe($first);
+    expect((new FilterApplier([new In, $first, $second]))->operationsFor(new FilterData('orders.status', 'equals', 'open')))
+        ->toBe([$first, $second]);
 });
 
-it('hands the filter to its operation', function () {
-    $filterData = new FilterData('orders.notes', 'in', ['rush', null]);
-    $applied = Order::query()->where(fn (Builder $group) => filterApplier()->apply($group, $filterData, FilterSetOperator::And));
-    $handled = Order::query()->where(fn (Builder $group) => (new In)->handle($group, $filterData, FilterSetOperator::And, new MariaDbAdapter));
+it('applies every operation that can handle a filter', function () {
+    Order::factory()->createMany([
+        ['code' => 'open-rush', 'status' => 'open', 'notes' => 'rush'],
+        ['code' => 'closed-rush', 'status' => 'closed', 'notes' => 'rush'],
+        ['code' => 'closed-gift', 'status' => 'closed', 'notes' => 'gift'],
+    ]);
+    $closedOnly = new class implements FilterOperationContract
+    {
+        public function canHandle(FilterData $filterData): bool
+        {
+            return $filterData->operator === 'equals';
+        }
 
-    expect($applied->toRawSql())->toBe($handled->toRawSql());
+        public function rules(): array
+        {
+            return [];
+        }
+
+        public function handle(Builder $query, FilterData $filterData): Builder
+        {
+            return $query->where('orders.status', 'closed');
+        }
+    };
+    $query = Order::query();
+
+    $query->where(fn (Builder $group) => (new FilterApplier([new Equals, $closedOnly]))->apply(
+        $group,
+        new FilterData('orders.notes', 'equals', 'rush'),
+        FilterSetOperator::And,
+    ));
+
+    expect($query->pluck('code')->all())->toBe(['closed-rush']);
 });
 
 it('refuses a filter no operation can handle', function () {
@@ -107,6 +160,22 @@ it('joins each filter with its set operator', function () {
     });
 
     expect($query->orderBy('code')->pluck('code')->all())->toBe(['closed', 'open']);
+});
+
+it('keeps an or in an operation\'s condition within its filter', function () use ($either) {
+    Order::factory()->createMany([
+        ['code' => 'open-rush', 'status' => 'open', 'notes' => 'rush'],
+        ['code' => 'closed-gift', 'status' => 'closed', 'notes' => 'gift'],
+    ]);
+    $applier = new FilterApplier([new Equals, $either]);
+    $query = Order::query();
+
+    $query->where(function (Builder $group) use ($applier) {
+        $applier->apply($group, new FilterData('orders.status', 'equals', 'open'), FilterSetOperator::And);
+        $applier->apply($group, new FilterData('orders.notes', 'either', ['rush', 'gift']), FilterSetOperator::And);
+    });
+
+    expect($query->pluck('code')->all())->toBe(['open-rush']);
 });
 
 describe('relations', function () use ($codes, $filter) {

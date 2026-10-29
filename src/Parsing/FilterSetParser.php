@@ -26,7 +26,7 @@ use LogicException;
 
 /**
  * Validates a request's filter_sets and turns them into typed filter sets. Each
- * value is checked against the rules of the operation the applier will hand
+ * value is checked against the rules of every operation the applier will hand
  * its filter to. It reports every problem at once, keyed by input path, and
  * applies nothing, so a rejected request leaves the query untouched.
  */
@@ -71,14 +71,14 @@ final class FilterSetParser
                     $this->normalize($filter['value']),
                     $target['relation'] ?? null,
                 );
-                $operation = $this->applier->operationFor($filterData);
-                $valueErrors = $operation === null ? [] : $this->valueErrors($operation, $filterData->value);
+                $operations = $this->applier->operationsFor($filterData);
+                $valueErrors = $operations === [] ? [] : $this->valueErrors($operations, $filterData->value);
 
                 if ($target === null) {
                     $errors["{$path}.field"][] = $this->message('not_filterable');
                 }
 
-                if ($operation === null) {
+                if ($operations === []) {
                     $errors["{$path}.filter_operator"][] = $this->message('unsupported_operator');
                 }
 
@@ -156,13 +156,16 @@ final class FilterSetParser
     }
 
     /**
-     * The message for each of the operation's rules that the value fails.
+     * The message for each rule of the operations that the value fails.
      *
+     * @param  non-empty-list<FilterOperationContract>  $operations
      * @return list<string>
      */
-    private function valueErrors(FilterOperationContract $operation, mixed $value): array
+    private function valueErrors(array $operations, mixed $value): array
     {
-        return array_values(Validator::make(['value' => $value], ['value' => $operation->rules()])->errors()->messages()['value'] ?? []);
+        $rules = array_merge(...array_map(fn (FilterOperationContract $operation): array => $operation->rules(), $operations));
+
+        return array_values(Validator::make(['value' => $value], ['value' => $rules])->errors()->messages()['value'] ?? []);
     }
 
     /**

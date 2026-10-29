@@ -19,9 +19,9 @@ abstract class TestCase extends Orchestra
     }
 
     /**
-     * The suite runs on MariaDB, the database the package ships an adapter
-     * for. DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME and DB_PASSWORD point it
-     * at a server; phpunit.xml.dist holds the defaults.
+     * The suite runs on MariaDB. DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME
+     * and DB_PASSWORD point it at a server; phpunit.xml.dist holds the
+     * defaults.
      */
     protected function defineEnvironment($app): void
     {

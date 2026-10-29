@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Dashworthy\ApiFilters\Filtering;
 
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Enums\FilterOperator;
@@ -14,22 +13,21 @@ use Illuminate\Database\Eloquent\Model;
 use LogicException;
 
 /**
- * Hands each filter to the first operation that can handle it, with the
- * adapter for the query's database. A filter through a relation runs inside
- * has(), joined by the set's operator, so it matches rows with at least one
- * related row that satisfies it, and its column is qualified there against the
- * related table. doesntHave names the relation itself, so it is handed the
- * set's group.
+ * Hands each filter to every operation that can handle it, inside a where
+ * group of the filter's own joined to the rest of its set by the set's
+ * operator, so an operation only writes its own condition and even an OR in it
+ * stays within the filter. A filter through a relation is handed the
+ * relation's has() query instead, with its column qualified there against the
+ * related table, so it matches rows with at least one related row that
+ * satisfies it. doesntHave names the relation itself, so it is handed the
+ * filter's group.
  */
 final class FilterApplier
 {
     /**
      * @param  list<FilterOperationContract>  $operations  in the order api-filters.operations lists them
      */
-    public function __construct(
-        private readonly DatabaseAdapterContract $adapter,
-        private readonly array $operations,
-    ) {}
+    public function __construct(private readonly array $operations) {}
 
     /**
      * @template TModel of Model
@@ -40,42 +38,50 @@ final class FilterApplier
      */
     public function apply(Builder $group, FilterData $filterData, FilterSetOperator $filterSetOperator): void
     {
-        $operation = $this->operationFor($filterData)
-            ?? throw new LogicException("No api-filters operation can handle the [{$filterData->operator}] operator.");
+        $operations = $this->operationsFor($filterData);
 
-        if ($filterData->relation === null || $filterData->operator === FilterOperator::DoesntHave->value) {
-            $operation->handle($group, $filterData, $filterSetOperator, $this->adapter);
-
-            return;
+        if ($operations === []) {
+            throw new LogicException("No api-filters operation can handle the [{$filterData->operator}] operator.");
         }
 
-        $group->has(
-            $filterData->relation,
-            '>=',
-            1,
-            $filterSetOperator->value,
-            fn (Builder $related) => $operation->handle(
-                $related,
-                $filterData->withColumn($related->qualifyColumn($filterData->column)),
-                FilterSetOperator::And,
-                $this->adapter,
-            ),
-        );
+        $group->where(function (Builder $filter) use ($operations, $filterData): void {
+            if ($filterData->relation === null || $filterData->operator === FilterOperator::DoesntHave->value) {
+                $this->handle($filter, $operations, $filterData);
+
+                return;
+            }
+
+            $filter->has($filterData->relation, '>=', 1, 'and', function (Builder $related) use ($operations, $filterData): void {
+                $this->handle($related, $operations, $filterData);
+            });
+        }, boolean: 'and');
     }
 
     /**
-     * The first operation that can handle the filter, or null when none can.
-     * The parser checks each value against the rules of the operation this
-     * returns, so the operation that checked a value is the one that applies it.
+     * Every operation that can handle the filter, in order. The parser checks
+     * each value against all of their rules, so the operations that checked a
+     * value are the ones that apply it.
+     *
+     * @return list<FilterOperationContract>
      */
-    public function operationFor(FilterData $filterData): ?FilterOperationContract
+    public function operationsFor(FilterData $filterData): array
     {
-        foreach ($this->operations as $operation) {
-            if ($operation->canHandle($filterData)) {
-                return $operation;
-            }
-        }
+        return array_values(array_filter(
+            $this->operations,
+            fn (FilterOperationContract $operation): bool => $operation->canHandle($filterData),
+        ));
+    }
 
-        return null;
+    /**
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $query
+     * @param  list<FilterOperationContract>  $operations
+     */
+    private function handle(Builder $query, array $operations, FilterData $filterData): void
+    {
+        foreach ($operations as $operation) {
+            $operation->handle($query, $filterData);
+        }
     }
 }
