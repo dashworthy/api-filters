@@ -48,7 +48,7 @@ php artisan vendor:publish --tag="api-filters-lang"
 
 ### Request format
 
-A client sends filter sets, sorts and an optional result window. It is the same format [dashworthy/visualizations](https://github.com/dashworthy/visualizations) uses:
+A client sends filter sets, sorts and an optional result window:
 
 ```json
 {
