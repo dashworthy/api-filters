@@ -34,6 +34,21 @@ arch('every class keeps to the approved directories')
     ->ignoring(ApiFiltersServiceProvider::class);
 
 /*
+ | ignoring() matches by prefix, so it also passes any class or directory whose
+ | name starts with an entry point's (ApiFiltersServiceProviderContract, or
+ | src/ApiFiltersServiceProvider/). This pins the root to the entry points
+ | themselves; each change that adds one names its file here.
+ */
+it('keeps only the entry points at the package root', function () {
+    $sourceRoot = dirname(__DIR__).'/src';
+
+    expect(array_map(basename(...), glob($sourceRoot.'/*.php') ?: []))
+        ->toEqualCanonicalizing(['ApiFiltersServiceProvider.php'])
+        ->and(glob($sourceRoot.'/ApiFilters*', GLOB_ONLYDIR) ?: [])
+        ->toBe([]);
+});
+
+/*
  | A class is named for the directory it sits in. Each approved directory that
  | calls for a suffix adds it here.
  */
