@@ -106,18 +106,18 @@ An operator is a class that implements `Dashworthy\ApiFilters\Contracts\FilterOp
 |---|---|
 | `canHandle(FilterData $filterData)` | Says whether it applies this filter, usually by its `operator` |
 | `rules()` | Returns the Laravel validation rules the value must pass |
-| `handle($query, $filterData, $filterSetOperator, $adapter)` | Adds the condition, joined by `$filterSetOperator->value` |
+| `handle(Builder $query, FilterData $filterData)` | Adds the filter's condition to `$query` |
 
-List the class under `operations` in `config/api-filters.php`. For each filter, the first class whose `canHandle()` accepts it checks the value against its `rules()`, then applies it. An operator that no class handles gets a 422. List your class before a built-in one to replace that operator.
+List the class under `operations` in `config/api-filters.php`. Every class whose `canHandle()` accepts a filter checks the value against its `rules()`, then adds its condition, so two classes that handle the same operator both apply. An operator that no class handles gets a 422. To replace a built-in operator, take its class out of the list and add yours.
+
+Operations write their SQL with Laravel's query builder, which writes it for each database: `whereLike()` matches in any letter case and `whereDate()` compares calendar dates wherever they run. Where an operator needs different SQL on your database, replace its class.
 
 This operation keeps the rows whose point column lies inside a polygon:
 
 ```php
 use Closure;
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Illuminate\Database\Eloquent\Builder;
 
 class WithinPolygon implements FilterOperationContract
@@ -149,13 +149,13 @@ class WithinPolygon implements FilterOperationContract
         ];
     }
 
-    public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+    public function handle(Builder $query, FilterData $filterData): Builder
     {
         $ring = array_map(fn (array $position): array => array_map(floatval(...), $position), $filterData->value);
         $polygon = json_encode(['type' => 'Polygon', 'coordinates' => [$ring]], JSON_THROW_ON_ERROR);
         $column = $query->getQuery()->getGrammar()->wrap($filterData->column);
 
-        return $query->whereRaw("ST_Contains(ST_GeomFromGeoJSON(?), {$column})", [$polygon], $filterSetOperator->value);
+        return $query->whereRaw("ST_Contains(ST_GeomFromGeoJSON(?), {$column})", [$polygon]);
     }
 }
 ```
@@ -173,7 +173,7 @@ The package does the risky parts before `handle()` runs:
 
 - `$filterData->column` is a visible column of the model, already checked and qualified with its table.
 - The value has passed `rules()`. `scalarValue()`, `stringValue()` and `listValue()` read it back with a type.
-- The condition lands inside the filter set's group, so it cannot widen the constraints you applied first.
+- The condition lands in a group of the filter's own, joined to its set by the set's `and` or `or`, inside the set's group. Even an `orWhere()` in it cannot widen the constraints you applied first.
 
 The rest is up to you. Bind every value, as the `?` in `whereRaw()` does above, and wrap the column with the grammar. Never write client input into SQL. Cap the size of a value in `rules()`, as `max:1000` does here, so one request cannot make the database do unbounded work.
 
@@ -183,19 +183,6 @@ The rest is up to you. Bind every value, as the `?` in `whereRaw()` does above, 
 - **Every visible column is filterable.** `$hidden` and `$visible` are the boundary. A column you forget to hide can be probed one character at a time, for example with `password startsWith $2y$10$a`, so hide anything a client must not search.
 - **Relations.** A dotted field such as `customer.name` is rejected. Clients never choose which method is called on your model.
 - **Mistakes.** An unknown operator, a bad value or a field that cannot be used returns a 422 validation error keyed by its input path, for example `filter_sets.0.filters.1.field`. An unknown column and a hidden one get the same message.
-
-### Databases
-
-Each database driver maps to an adapter that writes its SQL, so a filter gives the same results wherever it runs. The package ships `MariaDbAdapter` for the `mariadb` driver. Filtering a query on any other driver throws a `LogicException` until you map that driver in `config/api-filters.php`:
-
-```php
-'adapters' => [
-    'mariadb' => MariaDbAdapter::class,
-    'mysql' => MariaDbAdapter::class, // MariaDB reached through the mysql driver
-],
-```
-
-An adapter for another database implements `Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract`: `compare()`, `whereIn()`, `whereLike()`, which must match in any letter case, and `whereDate()`.
 
 ### Limits
 
@@ -230,7 +217,7 @@ class ListOrdersRequest extends FilterableRequest
 
 ## Testing
 
-The suite runs on MariaDB, the database the package ships an adapter for. Start one, then run every check:
+The suite runs on MariaDB. Start one, then run every check:
 
 ```bash
 docker run -d -p 3306:3306 -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1 -e MARIADB_DATABASE=api_filters mariadb:11.4

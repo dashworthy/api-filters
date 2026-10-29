@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Dashworthy\ApiFilters\Adapters\MariaDbAdapter;
 use Dashworthy\ApiFilters\FilterOperations\Dates\DateAfter;
 use Dashworthy\ApiFilters\FilterOperations\Dates\DateBefore;
 use Dashworthy\ApiFilters\FilterOperations\Dates\DateIs;
@@ -26,33 +25,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Database Adapters
-    |--------------------------------------------------------------------------
-    |
-    | Each connection driver maps to the adapter that writes its SQL, so a
-    | filter gives the same results on every database. Filtering a query on a
-    | driver with no adapter throws a LogicException. Each adapter implements
-    | Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract. An app that
-    | reaches MariaDB through the mysql driver can map mysql to MariaDbAdapter.
-    |
-    */
-
-    'adapters' => [
-        'mariadb' => MariaDbAdapter::class,
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
     | Filter Operations
     |--------------------------------------------------------------------------
     |
-    | The operators a client can name in filter_operator. For each filter, the
-    | first class here whose canHandle() accepts it checks the value against
-    | its rules() and adds the condition, and a filter that none can handle
-    | is rejected. Each implements
-    | Dashworthy\ApiFilters\Contracts\FilterOperationContract. Add your own
-    | class to give clients a new operator, or list it before a built-in one
-    | to replace that operator.
+    | The operators a client can name in filter_operator. Every class here
+    | whose canHandle() accepts a filter checks the value against its rules()
+    | and adds its condition, and a filter that none can handle is rejected.
+    | Each implements Dashworthy\ApiFilters\Contracts\FilterOperationContract.
+    | Add your own class to give clients a new operator, or swap a built-in
+    | class for yours to replace that operator.
     |
     */
 

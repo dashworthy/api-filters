@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Dashworthy\ApiFilters;
 
 use Dashworthy\ApiFilters\Columns\ColumnResolver;
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Filtering\FilterApplier;
 use Dashworthy\ApiFilters\Parsing\FilterSetParser;
@@ -59,7 +58,7 @@ final class ApiFilters
      */
     public function filter(mixed $filterSets): self
     {
-        $applier = new FilterApplier($this->adapter(), $this->operations());
+        $applier = new FilterApplier($this->operations());
         $filterSets = (new FilterSetParser($this->columns, $applier))->parse($filterSets, $this->query->getModel());
 
         foreach ($filterSets as $filterSet) {
@@ -79,24 +78,6 @@ final class ApiFilters
     public function query(): Builder
     {
         return $this->query;
-    }
-
-    /**
-     * The adapter api-filters.adapters registers for the query's database
-     * driver. A driver without one is a configuration mistake, so it fails
-     * loudly rather than filtering with another database's SQL.
-     */
-    private function adapter(): DatabaseAdapterContract
-    {
-        $driver = $this->query->getModel()->getConnection()->getDriverName();
-        $adapter = Config::array('api-filters.adapters')[$driver] ?? null;
-        $adapter = is_string($adapter) ? Container::getInstance()->make($adapter) : $adapter;
-
-        if (! $adapter instanceof DatabaseAdapterContract) {
-            throw new LogicException("No api-filters adapter is registered for the [{$driver}] database driver. Map the driver to a ".DatabaseAdapterContract::class.' in api-filters.adapters.');
-        }
-
-        return $adapter;
     }
 
     /**

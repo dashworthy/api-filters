@@ -2,10 +2,8 @@
 
 declare(strict_types=1);
 
-use Dashworthy\ApiFilters\Adapters\MariaDbAdapter;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Enums\FilterOperator;
-use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Dashworthy\ApiFilters\FilterOperations\Equality\Equals;
 use Dashworthy\ApiFilters\FilterOperations\Sets\In;
 use Illuminate\Database\Eloquent\Builder;
@@ -38,8 +36,8 @@ it('keeps its or inside the filter', function () {
     $query = Order::query();
 
     $query->where(function (Builder $group) {
-        (new Equals)->handle($group, new FilterData('orders.status', FilterOperator::Equals->value, 'open'), FilterSetOperator::And, new MariaDbAdapter);
-        (new In)->handle($group, new FilterData('orders.notes', FilterOperator::In->value, ['rush', null]), FilterSetOperator::And, new MariaDbAdapter);
+        (new Equals)->handle($group, new FilterData('orders.status', FilterOperator::Equals->value, 'open'));
+        (new In)->handle($group, new FilterData('orders.notes', FilterOperator::In->value, ['rush', null]));
     });
 
     expect($query->pluck('code')->all())->toBe(['open-rush']);

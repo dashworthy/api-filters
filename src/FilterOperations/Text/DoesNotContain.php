@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Dashworthy\ApiFilters\FilterOperations\Text;
 
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Enums\FilterOperator;
-use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\Rule;
 
@@ -32,14 +30,10 @@ final class DoesNotContain implements FilterOperationContract
         return [Rule::anyOf(['string', 'numeric'])];
     }
 
-    public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+    public function handle(Builder $query, FilterData $filterData): Builder
     {
-        $value = $filterData->scalarValue();
-        $pattern = '%'.$value.'%';
+        $pattern = '%'.$filterData->scalarValue().'%';
 
-        return $query->where(
-            fn (Builder $nested) => $adapter->whereLike($nested, $filterData->column, $pattern, 'and', not: true)->orWhereNull($filterData->column),
-            boolean: $filterSetOperator->value,
-        );
+        return $query->where(fn (Builder $nested) => $nested->whereNotLike($filterData->column, $pattern)->orWhereNull($filterData->column));
     }
 }

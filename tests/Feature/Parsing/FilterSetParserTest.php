@@ -2,9 +2,7 @@
 
 declare(strict_types=1);
 
-use Dashworthy\ApiFilters\Adapters\MariaDbAdapter;
 use Dashworthy\ApiFilters\Columns\ColumnResolver;
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Data\FilterSetData;
@@ -77,21 +75,45 @@ describe('values are checked against the rules of the operation that handles the
             return ['required', 'list', 'size:2'];
         }
 
-        public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+        public function handle(Builder $query, FilterData $filterData): Builder
         {
-            return $query->whereBetween($filterData->column, $filterData->listValue(), $filterSetOperator->value);
+            return $query->whereBetween($filterData->column, $filterData->listValue());
         }
     };
 
     it('accepts a value that passes the rules', function () use ($between, $filter, $set) {
-        $filterSets = (new FilterSetParser(new ColumnResolver, new FilterApplier(new MariaDbAdapter, [$between])))
+        $filterSets = (new FilterSetParser(new ColumnResolver, new FilterApplier([$between])))
             ->parse([$set($filter('total', 'between', [1, 2]))], new Order);
 
         expect($filterSets[0]->filters)->toEqual([new FilterData('orders.total', 'between', [1, 2])]);
     });
 
+    it('checks the value against every operation that can handle the filter', function () use ($between, $filter, $set) {
+        $positive = new class implements FilterOperationContract
+        {
+            public function canHandle(FilterData $filterData): bool
+            {
+                return $filterData->operator === 'between';
+            }
+
+            public function rules(): array
+            {
+                return [fn (string $attribute, mixed $value, Closure $fail) => min((array) $value) < 0 ? $fail('The :attribute must not be negative.') : null];
+            }
+
+            public function handle(Builder $query, FilterData $filterData): Builder
+            {
+                return $query;
+            }
+        };
+        $parse = fn () => (new FilterSetParser(new ColumnResolver, new FilterApplier([$between, $positive])))
+            ->parse([$set($filter('total', 'between', [-1, 2]))], new Order);
+
+        expect($parse)->toThrow(ValidationException::class, 'The value must not be negative.');
+    });
+
     it('reports the rules a value fails', function () use ($between, $filter, $set) {
-        $parse = fn () => (new FilterSetParser(new ColumnResolver, new FilterApplier(new MariaDbAdapter, [$between])))
+        $parse = fn () => (new FilterSetParser(new ColumnResolver, new FilterApplier([$between])))
             ->parse([$set($filter('total', 'between', [1]))], new Order);
 
         expect($parse)->toThrow(ValidationException::class, 'The value field must contain 2 items.');

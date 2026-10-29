@@ -3,11 +3,9 @@
 declare(strict_types=1);
 
 use Dashworthy\ApiFilters\ApiFilters;
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterSetOperator;
-use Illuminate\Contracts\Container\BindingResolutionException;
+use Dashworthy\ApiFilters\FilterOperations\Equality\Equals;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -132,45 +130,6 @@ describe('string tokens are normalized', function () use ($codes, $filter, $set)
     });
 });
 
-describe('database adapters', function () use ($filter, $set) {
-    it('writes the SQL through the adapter mapped to the connection driver', function () use ($filter, $set) {
-        config()->set('api-filters.adapters.mariadb', new class implements DatabaseAdapterContract
-        {
-            public function compare(Builder $query, string $column, string $operator, string|int|float|bool|null $value, string $boolean): Builder
-            {
-                throw new RuntimeException("compare {$column} {$operator} {$value}");
-            }
-
-            public function whereIn(Builder $query, string $column, array $values, string $boolean, bool $not = false): Builder
-            {
-                return $query;
-            }
-
-            public function whereLike(Builder $query, string $column, string $pattern, string $boolean, bool $not = false): Builder
-            {
-                return $query;
-            }
-
-            public function whereDate(Builder $query, string $column, string $operator, string $date, string $boolean): Builder
-            {
-                return $query;
-            }
-        });
-
-        ApiFilters::for(Order::query())->filter([$set('and', $filter('total', 'gt', 100))]);
-    })->throws(RuntimeException::class, 'compare orders.total > 100');
-
-    it('refuses a connection whose driver has no adapter', function () use ($filter, $set) {
-        ApiFilters::for(Order::on('testing'))->filter([$set('and', $filter('status', 'equals', 'open'))]);
-    })->throws(LogicException::class, 'No api-filters adapter is registered for the [sqlite] database driver.');
-
-    it('resolves an adapter class from the container', function () use ($filter, $set) {
-        config()->set('api-filters.adapters.sqlite', 'not-a-class');
-
-        ApiFilters::for(Order::on('testing'))->filter([$set('and', $filter('status', 'equals', 'open'))]);
-    })->throws(BindingResolutionException::class);
-});
-
 describe('apps add their own operations', function () use ($codes, $filter, $set) {
     /*
      | The README's example: keeps the rows whose point column lies inside a
@@ -202,13 +161,13 @@ describe('apps add their own operations', function () use ($codes, $filter, $set
             ];
         }
 
-        public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+        public function handle(Builder $query, FilterData $filterData): Builder
         {
             $ring = array_map(fn (array $position): array => array_map(floatval(...), $position), $filterData->value);
             $polygon = json_encode(['type' => 'Polygon', 'coordinates' => [$ring]], JSON_THROW_ON_ERROR);
             $column = $query->getQuery()->getGrammar()->wrap($filterData->column);
 
-            return $query->whereRaw("ST_Contains(ST_GeomFromGeoJSON(?), {$column})", [$polygon], $filterSetOperator->value);
+            return $query->whereRaw("ST_Contains(ST_GeomFromGeoJSON(?), {$column})", [$polygon]);
         }
     };
 
@@ -242,8 +201,33 @@ describe('apps add their own operations', function () use ($codes, $filter, $set
         ))->toBe(['inside']);
     });
 
-    it('lets an operation listed first replace a built-in one', function () use ($codes, $filter, $set) {
-        config()->prepend('api-filters.operations', new class implements FilterOperationContract
+    it('replaces a built-in operation the config no longer lists', function () use ($codes, $filter, $set) {
+        config()->set('api-filters.operations', [
+            ...array_filter(config('api-filters.operations'), fn (string $operation): bool => $operation !== Equals::class),
+            new class implements FilterOperationContract
+            {
+                public function canHandle(FilterData $filterData): bool
+                {
+                    return $filterData->operator === 'equals';
+                }
+
+                public function rules(): array
+                {
+                    return ['required', 'string'];
+                }
+
+                public function handle(Builder $query, FilterData $filterData): Builder
+                {
+                    return $query->whereLike($filterData->column, $filterData->stringValue().'%');
+                }
+            },
+        ]);
+
+        expect($codes([$set('and', $filter('code', 'equals', 'out'))]))->toBe(['outside']);
+    });
+
+    it('applies every operation that can handle a filter', function () use ($codes, $filter, $set) {
+        config()->push('api-filters.operations', new class implements FilterOperationContract
         {
             public function canHandle(FilterData $filterData): bool
             {
@@ -252,16 +236,16 @@ describe('apps add their own operations', function () use ($codes, $filter, $set
 
             public function rules(): array
             {
-                return ['required', 'string'];
+                return [];
             }
 
-            public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+            public function handle(Builder $query, FilterData $filterData): Builder
             {
-                return $adapter->whereLike($query, $filterData->column, $filterData->stringValue().'%', $filterSetOperator->value);
+                return $query->whereNotNull('location');
             }
         });
 
-        expect($codes([$set('and', $filter('code', 'equals', 'out'))]))->toBe(['outside']);
+        expect($codes([$set('and', $filter('status', 'equals', 'open'))]))->toBe(['inside', 'outside']);
     });
 
     it('refuses an entry that is not an operation', function () use ($filter, $set) {
