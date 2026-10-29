@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use Dashworthy\ApiFilters\Adapters\MariaDbAdapter;
 use Dashworthy\ApiFilters\ApiFiltersServiceProvider;
+use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Translation\FileLoader;
@@ -14,7 +14,7 @@ mutates(ApiFiltersServiceProvider::class);
 
 it('merges the package config', function () {
     expect(config('api-filters.limits.filter_sets'))->toBe(10)
-        ->and(config('api-filters.adapters'))->toBe(['mariadb' => MariaDbAdapter::class]);
+        ->and(config('api-filters.operations'))->toHaveCount(16)->each->toImplement(FilterOperationContract::class);
 });
 
 it('keeps a host app value over the package default', function () {

@@ -18,15 +18,4 @@ final readonly class FilterSetData
         public FilterSetOperator $operator,
         public array $filters,
     ) {}
-
-    /**
-     * @param  array{filter_set_operator: string, filters: list<array{column: string, filter_operator: string, value: scalar|list<scalar|null>|null}>}  $filterSet
-     */
-    public static function fromValidated(array $filterSet): self
-    {
-        return new self(
-            operator: FilterSetOperator::from($filterSet['filter_set_operator']),
-            filters: array_map(FilterData::fromValidated(...), $filterSet['filters']),
-        );
-    }
 }

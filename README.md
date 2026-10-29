@@ -86,6 +86,8 @@ Filters never widen the constraints you apply first. Each filter set runs inside
 
 ### Operators
 
+These operators ship with the package. You can [add your own](#adding-your-own-operators).
+
 | Operator | Matches | Value |
 |---|---|---|
 | `equals`, `doesNotEquals` | `=`, `!=` (`IS NULL`, `IS NOT NULL` for `null`). `doesNotEquals` leaves out NULL rows | a single value or `null` |
@@ -96,25 +98,91 @@ Filters never widen the constraints you apply first. Each filter set runs inside
 
 The strings `true` and `on`, `false` and `off`, and `null` are read as `true`, `false` and `null`, element by element in a list. Every other string, numeric ones included, is compared as sent, so `"007"` never matches `7`. The `normalizers` key in `config/api-filters.php` lists the classes that do this. Each implements `Dashworthy\ApiFilters\Contracts\NormalizerContract` and hands its result to `$next`; an empty list switches them off.
 
+### Adding your own operators
+
+An operator is a class that implements `Dashworthy\ApiFilters\Contracts\FilterOperationContract`:
+
+| Method | Job |
+|---|---|
+| `canHandle(FilterData $filterData)` | Says whether it applies this filter, usually by its `operator` |
+| `rules()` | Returns the Laravel validation rules the value must pass |
+| `handle(Builder $query, FilterData $filterData)` | Adds the filter's condition to `$query` |
+
+List the class under `operations` in `config/api-filters.php`. Every class whose `canHandle()` accepts a filter checks the value against its `rules()`, then adds its condition, so two classes that handle the same operator both apply. An operator that no class handles gets a 422. To replace a built-in operator, take its class out of the list and add yours.
+
+Operations write their SQL with Laravel's query builder, which writes it for each database: `whereLike()` matches in any letter case and `whereDate()` compares calendar dates wherever they run. Where an operator needs different SQL on your database, replace its class.
+
+This operation keeps the rows whose point column lies inside a polygon:
+
+```php
+use Closure;
+use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
+use Dashworthy\ApiFilters\Data\FilterData;
+use Illuminate\Database\Eloquent\Builder;
+
+class WithinPolygon implements FilterOperationContract
+{
+    public function canHandle(FilterData $filterData): bool
+    {
+        return $filterData->operator === 'withinPolygon';
+    }
+
+    /**
+     * A closed ring of up to 1000 [longitude, latitude] positions.
+     */
+    public function rules(): array
+    {
+        return [
+            'bail',
+            'required',
+            'list',
+            'min:4',
+            'max:1000',
+            function (string $attribute, array $ring, Closure $fail): void {
+                $isPosition = fn (mixed $position): bool => is_array($position) && array_is_list($position)
+                    && count($position) === 2 && is_numeric($position[0]) && is_numeric($position[1]);
+
+                if (array_filter($ring, $isPosition) !== $ring || $ring[0] != $ring[array_key_last($ring)]) {
+                    $fail('The :attribute must be a closed ring of [longitude, latitude] positions.');
+                }
+            },
+        ];
+    }
+
+    public function handle(Builder $query, FilterData $filterData): Builder
+    {
+        $ring = array_map(fn (array $position): array => array_map(floatval(...), $position), $filterData->value);
+        $polygon = json_encode(['type' => 'Polygon', 'coordinates' => [$ring]], JSON_THROW_ON_ERROR);
+        $column = $query->getQuery()->getGrammar()->wrap($filterData->column);
+
+        return $query->whereRaw("ST_Contains(ST_GeomFromGeoJSON(?), {$column})", [$polygon]);
+    }
+}
+```
+
+```php
+'operations' => [
+    // ...the built-in operations
+    WithinPolygon::class,
+],
+```
+
+A client can then send `{ "field": "location", "filter_operator": "withinPolygon", "value": [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]] }`.
+
+The package does the risky parts before `handle()` runs:
+
+- `$filterData->column` is a visible column of the model, already checked and qualified with its table.
+- The value has passed `rules()`. `scalarValue()`, `stringValue()` and `listValue()` read it back with a type.
+- The condition lands in a group of the filter's own, joined to its set by the set's `and` or `or`, inside the set's group. Even an `orWhere()` in it cannot widen the constraints you applied first.
+
+The rest is up to you. Bind every value, as the `?` in `whereRaw()` does above, and wrap the column with the grammar. Never write client input into SQL. Cap the size of a value in `rules()`, as `max:1000` does here, so one request cannot make the database do unbounded work.
+
 ### What a client can and cannot reach
 
 - **Columns.** A field must be a real column of the model's table, matched in any letter case, that the model does not hide (`$hidden`, or missing from a non-empty `$visible`). Fields such as `password` and `remember_token` cannot be filtered.
 - **Every visible column is filterable.** `$hidden` and `$visible` are the boundary. A column you forget to hide can be probed one character at a time, for example with `password startsWith $2y$10$a`, so hide anything a client must not search.
 - **Relations.** A dotted field such as `customer.name` is rejected. Clients never choose which method is called on your model.
 - **Mistakes.** An unknown operator, a bad value or a field that cannot be used returns a 422 validation error keyed by its input path, for example `filter_sets.0.filters.1.field`. An unknown column and a hidden one get the same message.
-
-### Databases
-
-Each database driver maps to an adapter that writes its SQL, so a filter gives the same results wherever it runs. The package ships `MariaDbAdapter` for the `mariadb` driver. Filtering a query on any other driver throws a `LogicException` until you map that driver in `config/api-filters.php`:
-
-```php
-'adapters' => [
-    'mariadb' => MariaDbAdapter::class,
-    'mysql' => MariaDbAdapter::class, // MariaDB reached through the mysql driver
-],
-```
-
-An adapter for another database implements `Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract`: `compare()`, `whereIn()`, `whereLike()`, which must match in any letter case, and `whereDate()`.
 
 ### Limits
 
@@ -149,7 +217,7 @@ class ListOrdersRequest extends FilterableRequest
 
 ## Testing
 
-The suite runs on MariaDB, the database the package ships an adapter for. Start one, then run every check:
+The suite runs on MariaDB. Start one, then run every check:
 
 ```bash
 docker run -d -p 3306:3306 -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1 -e MARIADB_DATABASE=api_filters mariadb:11.4

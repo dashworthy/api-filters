@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\ApiFiltersServiceProvider;
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Contracts\NormalizerContract;
 
@@ -35,7 +34,6 @@ arch('the package source declares strict types')
 arch('every class keeps to the approved directories')
     ->expect('Dashworthy\ApiFilters')
     ->toUseApprovedDirectories([
-        'Adapters' => DatabaseAdapterContract::class,
         'Columns',
         'Contracts' => fn (string $class): bool => interface_exists($class),
         'Data' => fn (string $class): bool => (new ReflectionClass($class))->isReadOnly(),
@@ -69,7 +67,6 @@ it('keeps only the entry points at the package root', function () {
 arch('every class is named for its directory')
     ->expect('Dashworthy\ApiFilters')
     ->toUseDirectorySuffixes([
-        'Adapters' => 'Adapter',
         'Columns' => 'Resolver',
         'Contracts' => 'Contract',
         'Data' => 'Data',

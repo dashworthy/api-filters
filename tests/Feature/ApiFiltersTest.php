@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use Dashworthy\ApiFilters\ApiFilters;
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
-use Illuminate\Contracts\Container\BindingResolutionException;
+use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
+use Dashworthy\ApiFilters\Data\FilterData;
+use Dashworthy\ApiFilters\FilterOperations\Equality\Equals;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Workbench\App\Models\Order;
 
@@ -128,41 +130,127 @@ describe('string tokens are normalized', function () use ($codes, $filter, $set)
     });
 });
 
-describe('database adapters', function () use ($filter, $set) {
-    it('writes the SQL through the adapter mapped to the connection driver', function () use ($filter, $set) {
-        config()->set('api-filters.adapters.mariadb', new class implements DatabaseAdapterContract
+describe('apps add their own operations', function () use ($codes, $filter, $set) {
+    /*
+     | The README's example: keeps the rows whose point column lies inside a
+     | polygon, sent as a closed ring of [longitude, latitude] positions.
+     */
+    $withinPolygon = new class implements FilterOperationContract
+    {
+        public function canHandle(FilterData $filterData): bool
         {
-            public function compare(Builder $query, string $column, string $operator, string|int|float|bool|null $value, string $boolean): Builder
+            return $filterData->operator === 'withinPolygon';
+        }
+
+        public function rules(): array
+        {
+            return [
+                'bail',
+                'required',
+                'list',
+                'min:4',
+                'max:1000',
+                function (string $attribute, array $ring, Closure $fail): void {
+                    $isPosition = fn (mixed $position): bool => is_array($position) && array_is_list($position)
+                        && count($position) === 2 && is_numeric($position[0]) && is_numeric($position[1]);
+
+                    if (array_filter($ring, $isPosition) !== $ring || $ring[0] != $ring[array_key_last($ring)]) {
+                        $fail('The :attribute must be a closed ring of [longitude, latitude] positions.');
+                    }
+                },
+            ];
+        }
+
+        public function handle(Builder $query, FilterData $filterData): Builder
+        {
+            $ring = array_map(fn (array $position): array => array_map(floatval(...), $position), $filterData->value);
+            $polygon = json_encode(['type' => 'Polygon', 'coordinates' => [$ring]], JSON_THROW_ON_ERROR);
+            $column = $query->getQuery()->getGrammar()->wrap($filterData->column);
+
+            return $query->whereRaw("ST_Contains(ST_GeomFromGeoJSON(?), {$column})", [$polygon]);
+        }
+    };
+
+    $square = [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]];
+
+    beforeEach(fn () => Order::factory()->createMany([
+        ['code' => 'inside', 'team_id' => 1, 'status' => 'open', 'location' => DB::raw("ST_GeomFromText('POINT(1 1)')")],
+        ['code' => 'outside', 'team_id' => 1, 'status' => 'open', 'location' => DB::raw("ST_GeomFromText('POINT(5 5)')")],
+        ['code' => 'nowhere', 'team_id' => 1, 'status' => 'open'],
+        ['code' => 'other-team', 'team_id' => 2, 'status' => 'closed', 'location' => DB::raw("ST_GeomFromText('POINT(1 1)')")],
+    ]));
+
+    it('filters with an operation listed in the config', function () use ($codes, $filter, $set, $square, $withinPolygon) {
+        config()->push('api-filters.operations', $withinPolygon);
+
+        expect($codes([$set('and', $filter('location', 'withinPolygon', $square))]))->toBe(['inside', 'other-team']);
+    });
+
+    it('checks the value against the operation\'s rules', function () use ($filter, $set, $withinPolygon) {
+        config()->push('api-filters.operations', $withinPolygon);
+
+        ApiFilters::for(Order::query())->filter([$set('and', $filter('location', 'withinPolygon', [[0, 0], [2, 0], [2, 2], [0, 2]]))]);
+    })->throws(ValidationException::class, 'The value must be a closed ring of [longitude, latitude] positions.');
+
+    it('keeps the operation inside the developer\'s constraints', function () use ($codes, $filter, $set, $square, $withinPolygon) {
+        config()->push('api-filters.operations', $withinPolygon);
+
+        expect($codes(
+            [$set('or', $filter('location', 'withinPolygon', $square), $filter('status', 'equals', 'closed'))],
+            Order::query()->where('team_id', 1),
+        ))->toBe(['inside']);
+    });
+
+    it('replaces a built-in operation the config no longer lists', function () use ($codes, $filter, $set) {
+        config()->set('api-filters.operations', [
+            ...array_filter(config('api-filters.operations'), fn (string $operation): bool => $operation !== Equals::class),
+            new class implements FilterOperationContract
             {
-                throw new RuntimeException("compare {$column} {$operator} {$value}");
+                public function canHandle(FilterData $filterData): bool
+                {
+                    return $filterData->operator === 'equals';
+                }
+
+                public function rules(): array
+                {
+                    return ['required', 'string'];
+                }
+
+                public function handle(Builder $query, FilterData $filterData): Builder
+                {
+                    return $query->whereLike($filterData->column, $filterData->stringValue().'%');
+                }
+            },
+        ]);
+
+        expect($codes([$set('and', $filter('code', 'equals', 'out'))]))->toBe(['outside']);
+    });
+
+    it('applies every operation that can handle a filter', function () use ($codes, $filter, $set) {
+        config()->push('api-filters.operations', new class implements FilterOperationContract
+        {
+            public function canHandle(FilterData $filterData): bool
+            {
+                return $filterData->operator === 'equals';
             }
 
-            public function whereIn(Builder $query, string $column, array $values, string $boolean, bool $not = false): Builder
+            public function rules(): array
             {
-                return $query;
+                return [];
             }
 
-            public function whereLike(Builder $query, string $column, string $pattern, string $boolean, bool $not = false): Builder
+            public function handle(Builder $query, FilterData $filterData): Builder
             {
-                return $query;
-            }
-
-            public function whereDate(Builder $query, string $column, string $operator, string $date, string $boolean): Builder
-            {
-                return $query;
+                return $query->whereNotNull('location');
             }
         });
 
-        ApiFilters::for(Order::query())->filter([$set('and', $filter('total', 'gt', 100))]);
-    })->throws(RuntimeException::class, 'compare orders.total > 100');
+        expect($codes([$set('and', $filter('status', 'equals', 'open'))]))->toBe(['inside', 'outside']);
+    });
 
-    it('refuses a connection whose driver has no adapter', function () use ($filter, $set) {
-        ApiFilters::for(Order::on('testing'))->filter([$set('and', $filter('status', 'equals', 'open'))]);
-    })->throws(LogicException::class, 'No api-filters adapter is registered for the [sqlite] database driver.');
+    it('refuses an entry that is not an operation', function () use ($filter, $set) {
+        config()->push('api-filters.operations', stdClass::class);
 
-    it('resolves an adapter class from the container', function () use ($filter, $set) {
-        config()->set('api-filters.adapters.sqlite', 'not-a-class');
-
-        ApiFilters::for(Order::on('testing'))->filter([$set('and', $filter('status', 'equals', 'open'))]);
-    })->throws(BindingResolutionException::class);
+        ApiFilters::for(Order::query())->filter([$set('and', $filter('status', 'equals', 'open'))]);
+    })->throws(LogicException::class, 'Every entry in api-filters.operations must implement Dashworthy\ApiFilters\Contracts\FilterOperationContract.');
 });

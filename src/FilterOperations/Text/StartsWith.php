@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Dashworthy\ApiFilters\FilterOperations\Text;
 
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterSetOperator;
+use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Validation\Rule;
 
 /**
  * Matches rows whose column starts with the value.
@@ -16,8 +16,21 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class StartsWith implements FilterOperationContract
 {
-    public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+    public function canHandle(FilterData $filterData): bool
     {
-        return $adapter->whereLike($query, $filterData->column, $filterData->value.'%', $filterSetOperator->value);
+        return $filterData->operator === FilterOperator::StartsWith->value;
+    }
+
+    /**
+     * A string or a number.
+     */
+    public function rules(): array
+    {
+        return [Rule::anyOf(['string', 'numeric'])];
+    }
+
+    public function handle(Builder $query, FilterData $filterData): Builder
+    {
+        return $query->whereLike($filterData->column, $filterData->scalarValue().'%');
     }
 }

@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Dashworthy\ApiFilters\FilterOperations\Dates;
 
-use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterSetOperator;
+use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -15,8 +14,21 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class DateBefore implements FilterOperationContract
 {
-    public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+    public function canHandle(FilterData $filterData): bool
     {
-        return $adapter->whereDate($query, $filterData->column, '<', (string) $filterData->value, $filterSetOperator->value);
+        return $filterData->operator === FilterOperator::DateBefore->value;
+    }
+
+    /**
+     * A YYYY-MM-DD calendar date.
+     */
+    public function rules(): array
+    {
+        return ['required', 'date_format:Y-m-d'];
+    }
+
+    public function handle(Builder $query, FilterData $filterData): Builder
+    {
+        return $query->whereDate($filterData->column, '<', $filterData->stringValue());
     }
 }

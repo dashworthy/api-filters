@@ -6,11 +6,12 @@ namespace Dashworthy\ApiFilters\Parsing;
 
 use Closure;
 use Dashworthy\ApiFilters\Columns\ColumnResolver;
+use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Contracts\NormalizerContract;
+use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Data\FilterSetData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
-use DateTimeImmutable;
+use Dashworthy\ApiFilters\Filtering\FilterApplier;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Config;
@@ -21,9 +22,10 @@ use Illuminate\Validation\ValidationException;
 use LogicException;
 
 /**
- * Validates a request's filter_sets and turns them into typed filter sets. It
- * reports every problem at once, keyed by input path, and applies nothing, so
- * a rejected request leaves the query untouched.
+ * Validates a request's filter_sets and turns them into typed filter sets. Each
+ * value is checked against the rules of every operation the applier will hand
+ * its filter to. It reports every problem at once, keyed by input path, and
+ * applies nothing, so a rejected request leaves the query untouched.
  */
 final class FilterSetParser
 {
@@ -32,7 +34,10 @@ final class FilterSetParser
      */
     private ?Closure $pipeline = null;
 
-    public function __construct(private readonly ColumnResolver $columns) {}
+    public function __construct(
+        private readonly ColumnResolver $columns,
+        private readonly FilterApplier $applier,
+    ) {}
 
     /**
      * @return list<FilterSetData>
@@ -55,34 +60,34 @@ final class FilterSetParser
 
             foreach ($set['filters'] as $filterIndex => $filter) {
                 $path = "filter_sets.{$setIndex}.filters.{$filterIndex}";
-                $operator = FilterOperator::from($filter['filter_operator']);
-                $value = $this->normalize($filter['value']);
                 $column = $this->resolveColumn($model, $filter['field']);
+                $filterData = new FilterData($column ?? '', $filter['filter_operator'], $this->normalize($filter['value']));
+                $operations = $this->applier->operationsFor($filterData);
+                $valueErrors = $operations === [] ? [] : $this->valueErrors($operations, $filterData->value);
 
                 if ($column === null) {
                     $errors["{$path}.field"][] = $this->message('not_filterable');
                 }
 
-                $valueError = $this->valueError($operator, $value);
-
-                if ($valueError !== null) {
-                    $errors["{$path}.value"][] = $valueError;
+                if ($operations === []) {
+                    $errors["{$path}.filter_operator"][] = $this->message('unsupported_operator');
                 }
 
-                if ($column !== null && $valueError === null) {
-                    /** @var scalar|list<scalar|null>|null $value */
-                    $filters[] = ['column' => $column, 'filter_operator' => $operator->value, 'value' => $value];
+                if ($valueErrors !== []) {
+                    $errors["{$path}.value"] = $valueErrors;
                 }
+
+                $filters[] = $filterData;
             }
 
-            $parsed[] = ['filter_set_operator' => $set['filter_set_operator'], 'filters' => $filters];
+            $parsed[] = new FilterSetData(FilterSetOperator::from($set['filter_set_operator']), $filters);
         }
 
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
         }
 
-        return array_map(FilterSetData::fromValidated(...), $parsed);
+        return $parsed;
     }
 
     /**
@@ -100,7 +105,7 @@ final class FilterSetParser
             'filter_sets.*.filter_set_operator' => ['required', Rule::enum(FilterSetOperator::class)],
             'filter_sets.*.filters' => ['required', 'list'],
             'filter_sets.*.filters.*.field' => ['required', 'string'],
-            'filter_sets.*.filters.*.filter_operator' => ['required', Rule::enum(FilterOperator::class)],
+            'filter_sets.*.filters.*.filter_operator' => ['required', 'string'],
             'filter_sets.*.filters.*.value' => ['present'],
         ], [
             'filter_sets.max' => $this->message('too_many_filter_sets', $this->limit('filter_sets')),
@@ -125,44 +130,16 @@ final class FilterSetParser
     }
 
     /**
-     * Why the value does not fit its operator, or null when it does.
+     * The message for each rule of the operations that the value fails.
+     *
+     * @param  non-empty-list<FilterOperationContract>  $operations
+     * @return list<string>
      */
-    private function valueError(FilterOperator $operator, mixed $value): ?string
+    private function valueErrors(array $operations, mixed $value): array
     {
-        if (in_array($operator, [FilterOperator::In, FilterOperator::NotIn], true)
-            && is_array($value)
-            && count($value) > $this->limit('in_values')) {
-            return $this->message('too_many_values', $this->limit('in_values'));
-        }
+        $rules = array_merge(...array_map(fn (FilterOperationContract $operation): array => $operation->rules(), $operations));
 
-        return $this->fits($operator, $value) ? null : $this->message('invalid_value');
-    }
-
-    private function fits(FilterOperator $operator, mixed $value): bool
-    {
-        return match ($operator) {
-            FilterOperator::Equals, FilterOperator::DoesNotEquals => $value === null || is_scalar($value),
-            FilterOperator::Lt, FilterOperator::Lte, FilterOperator::Gt, FilterOperator::Gte => is_scalar($value),
-            FilterOperator::In, FilterOperator::NotIn => is_array($value)
-                && $value !== []
-                && array_is_list($value)
-                && array_filter($value, fn (mixed $element): bool => $element !== null && ! is_scalar($element)) === [],
-            FilterOperator::StartsWith,
-            FilterOperator::Contains,
-            FilterOperator::EndsWith,
-            FilterOperator::DoesNotContain => is_string($value) || is_int($value) || is_float($value),
-            FilterOperator::DateIs,
-            FilterOperator::DateIsNot,
-            FilterOperator::DateBefore,
-            FilterOperator::DateAfter => is_string($value) && $this->isCalendarDate($value),
-        };
-    }
-
-    private function isCalendarDate(string $value): bool
-    {
-        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
-
-        return $date !== false && $date->format('Y-m-d') === $value;
+        return array_values(Validator::make(['value' => $value], ['value' => $rules])->errors()->messages()['value'] ?? []);
     }
 
     /**
