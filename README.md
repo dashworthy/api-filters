@@ -50,11 +50,11 @@ Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed re
 
 ## Contributing
 
-Thank you for considering contributing to API Filters! Please review our [contributing guide](.github/CONTRIBUTING.md) to get started.
+Thank you for considering contributing to API Filters! Please review our [contributing guide](https://github.com/dashworthy/api-filters/blob/HEAD/.github/CONTRIBUTING.md) to get started.
 
 ## Security Vulnerabilities
 
-Please review [our security policy](.github/SECURITY.md) on how to report security vulnerabilities.
+Please review [our security policy](https://github.com/dashworthy/api-filters/security/policy) on how to report security vulnerabilities.
 
 ## Credits
 

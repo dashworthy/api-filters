@@ -8,4 +8,4 @@ Only the latest major version receives security fixes.
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability within API Filters, please send an email to Andrew Leach at 7387639+andyleach@users.noreply.github.com. All security vulnerabilities will be promptly addressed.
+If you discover a security vulnerability within API Filters, please report it privately through [GitHub's private vulnerability reporting](https://github.com/dashworthy/api-filters/security/advisories/new). All security vulnerabilities will be promptly addressed.
