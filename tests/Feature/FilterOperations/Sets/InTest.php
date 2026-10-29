@@ -38,8 +38,8 @@ it('keeps its or inside the filter', function () {
     $query = Order::query();
 
     $query->where(function (Builder $group) {
-        (new Equals)->handle($group, new FilterData('orders.status', FilterOperator::Equals, 'open'), FilterSetOperator::And, new MariaDbAdapter);
-        (new In)->handle($group, new FilterData('orders.notes', FilterOperator::In, values: ['rush', null]), FilterSetOperator::And, new MariaDbAdapter);
+        (new Equals)->handle($group, new FilterData('orders.status', FilterOperator::Equals->value, 'open'), FilterSetOperator::And, new MariaDbAdapter);
+        (new In)->handle($group, new FilterData('orders.notes', FilterOperator::In->value, ['rush', null]), FilterSetOperator::And, new MariaDbAdapter);
     });
 
     expect($query->pluck('code')->all())->toBe(['open-rush']);

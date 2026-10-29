@@ -44,6 +44,7 @@ abstract class TestCase extends Orchestra
             $table->boolean('is_priority')->default(false);
             $table->dateTime('placed_at')->nullable();
             $table->string('internal_reference')->nullable();
+            $table->geometry('location', subtype: 'point')->nullable();
             $table->timestamps();
         });
 

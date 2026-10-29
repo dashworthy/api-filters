@@ -86,6 +86,8 @@ Filters never widen the constraints you apply first. Each filter set runs inside
 
 ### Operators
 
+These operators ship with the package. You can [add your own](#adding-your-own-operators).
+
 | Operator | Matches | Value |
 |---|---|---|
 | `equals`, `doesNotEquals` | `=`, `!=` (`IS NULL`, `IS NOT NULL` for `null`). `doesNotEquals` leaves out NULL rows | a single value or `null` |
@@ -95,6 +97,85 @@ Filters never widen the constraints you apply first. Each filter set runs inside
 | `dateIs`, `dateIsNot`, `dateBefore`, `dateAfter` | the date part of the column, at any time of day | `YYYY-MM-DD` |
 
 The strings `true` and `on`, `false` and `off`, and `null` are read as `true`, `false` and `null`, element by element in a list. Every other string, numeric ones included, is compared as sent, so `"007"` never matches `7`. The `normalizers` key in `config/api-filters.php` lists the classes that do this. Each implements `Dashworthy\ApiFilters\Contracts\NormalizerContract` and hands its result to `$next`; an empty list switches them off.
+
+### Adding your own operators
+
+An operator is a class that implements `Dashworthy\ApiFilters\Contracts\FilterOperationContract`:
+
+| Method | Job |
+|---|---|
+| `canHandle(FilterData $filterData)` | Says whether it applies this filter, usually by its `operator` |
+| `rules()` | Returns the Laravel validation rules the value must pass |
+| `handle($query, $filterData, $filterSetOperator, $adapter)` | Adds the condition, joined by `$filterSetOperator->value` |
+
+List the class under `operations` in `config/api-filters.php`. For each filter, the first class whose `canHandle()` accepts it checks the value against its `rules()`, then applies it. An operator that no class handles gets a 422. List your class before a built-in one to replace that operator.
+
+This operation keeps the rows whose point column lies inside a polygon:
+
+```php
+use Closure;
+use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
+use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
+use Dashworthy\ApiFilters\Data\FilterData;
+use Dashworthy\ApiFilters\Enums\FilterSetOperator;
+use Illuminate\Database\Eloquent\Builder;
+
+class WithinPolygon implements FilterOperationContract
+{
+    public function canHandle(FilterData $filterData): bool
+    {
+        return $filterData->operator === 'withinPolygon';
+    }
+
+    /**
+     * A closed ring of up to 1000 [longitude, latitude] positions.
+     */
+    public function rules(): array
+    {
+        return [
+            'bail',
+            'required',
+            'list',
+            'min:4',
+            'max:1000',
+            function (string $attribute, array $ring, Closure $fail): void {
+                $isPosition = fn (mixed $position): bool => is_array($position) && array_is_list($position)
+                    && count($position) === 2 && is_numeric($position[0]) && is_numeric($position[1]);
+
+                if (array_filter($ring, $isPosition) !== $ring || $ring[0] != $ring[array_key_last($ring)]) {
+                    $fail('The :attribute must be a closed ring of [longitude, latitude] positions.');
+                }
+            },
+        ];
+    }
+
+    public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+    {
+        $ring = array_map(fn (array $position): array => array_map(floatval(...), $position), $filterData->value);
+        $polygon = json_encode(['type' => 'Polygon', 'coordinates' => [$ring]], JSON_THROW_ON_ERROR);
+        $column = $query->getQuery()->getGrammar()->wrap($filterData->column);
+
+        return $query->whereRaw("ST_Contains(ST_GeomFromGeoJSON(?), {$column})", [$polygon], $filterSetOperator->value);
+    }
+}
+```
+
+```php
+'operations' => [
+    // ...the built-in operations
+    WithinPolygon::class,
+],
+```
+
+A client can then send `{ "field": "location", "filter_operator": "withinPolygon", "value": [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]] }`.
+
+The package does the risky parts before `handle()` runs:
+
+- `$filterData->column` is a visible column of the model, already checked and qualified with its table.
+- The value has passed `rules()`. `scalarValue()`, `stringValue()` and `listValue()` read it back with a type.
+- The condition lands inside the filter set's group, so it cannot widen the constraints you applied first.
+
+The rest is up to you. Bind every value, as the `?` in `whereRaw()` does above, and wrap the column with the grammar. Never write client input into SQL. Cap the size of a value in `rules()`, as `max:1000` does here, so one request cannot make the database do unbounded work.
 
 ### What a client can and cannot reach
 

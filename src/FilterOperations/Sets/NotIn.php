@@ -7,6 +7,7 @@ namespace Dashworthy\ApiFilters\FilterOperations\Sets;
 use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
+use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -17,11 +18,25 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class NotIn implements FilterOperationContract
 {
+    public function canHandle(FilterData $filterData): bool
+    {
+        return $filterData->operator === FilterOperator::NotIn->value;
+    }
+
+    /**
+     * The same list as in.
+     */
+    public function rules(): array
+    {
+        return (new In)->rules();
+    }
+
     public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
     {
-        $listed = array_values(array_filter($filterData->values, fn (mixed $value): bool => $value !== null));
+        $values = $filterData->listValue();
+        $listed = array_values(array_filter($values, fn (mixed $value): bool => $value !== null));
 
-        if (count($listed) === count($filterData->values)) {
+        if (count($listed) === count($values)) {
             return $adapter->whereIn($query, $filterData->column, $listed, $filterSetOperator->value, not: true);
         }
 

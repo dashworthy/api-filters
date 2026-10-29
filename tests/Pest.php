@@ -7,6 +7,7 @@ use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
+use Dashworthy\ApiFilters\Filtering\FilterApplier;
 use Dashworthy\ApiFilters\Tests\TestCase;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,15 +26,19 @@ uses(RefreshDatabase::class)->in('Feature');
 function codesMatching(FilterOperationContract $operation, FilterOperator $operator, string $column, mixed $value): array
 {
     $query = Order::query();
-    $filterData = FilterData::fromValidated([
-        'column' => $query->qualifyColumn($column),
-        'filter_operator' => $operator->value,
-        'value' => $value,
-    ]);
+    $filterData = new FilterData($query->qualifyColumn($column), $operator->value, $value);
 
     $query->where(fn (Builder $group) => $operation->handle($group, $filterData, FilterSetOperator::And, new MariaDbAdapter));
 
     return $query->orderBy('code')->pluck('code')->all();
+}
+
+/**
+ * The applier ApiFilters builds for a MariaDB query, with the configured operations.
+ */
+function filterApplier(): FilterApplier
+{
+    return new FilterApplier(new MariaDbAdapter, array_map(app(...), config('api-filters.operations')));
 }
 
 /**

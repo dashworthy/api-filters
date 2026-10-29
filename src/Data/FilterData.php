@@ -4,37 +4,60 @@ declare(strict_types=1);
 
 namespace Dashworthy\ApiFilters\Data;
 
-use Dashworthy\ApiFilters\Enums\FilterOperator;
+use LogicException;
 
 /**
- * One validated filter: the qualified column it compares, its operator and its
- * normalized value. An in or notIn filter carries its list in values; every
- * other operator carries one value.
+ * One filter: the qualified column it compares, the operator the client named
+ * and its normalized value. The operation that handles the operator decides,
+ * through its rules(), which values reach it, and reads the value back through
+ * the getter for the shape those rules allow.
  */
 final readonly class FilterData
 {
-    /**
-     * @param  list<scalar|null>  $values
-     */
     public function __construct(
         public string $column,
-        public FilterOperator $operator,
-        public string|int|float|bool|null $value = null,
-        public array $values = [],
+        public string $operator,
+        public mixed $value = null,
     ) {}
 
     /**
-     * @param  array{column: string, filter_operator: string, value: scalar|list<scalar|null>|null}  $filter
+     * @throws LogicException when the value is a list or an object
      */
-    public static function fromValidated(array $filter): self
+    public function scalarValue(): string|int|float|bool|null
     {
-        $value = $filter['value'];
+        return is_scalar($this->value) || $this->value === null ? $this->value : throw $this->notA('single value');
+    }
 
-        return new self(
-            column: $filter['column'],
-            operator: FilterOperator::from($filter['filter_operator']),
-            value: is_array($value) ? null : $value,
-            values: is_array($value) ? $value : [],
-        );
+    /**
+     * @throws LogicException when the value is not a string
+     */
+    public function stringValue(): string
+    {
+        return is_string($this->value) ? $this->value : throw $this->notA('string');
+    }
+
+    /**
+     * @return list<scalar|null>
+     *
+     * @throws LogicException when the value is not a list of single values and nulls
+     */
+    public function listValue(): array
+    {
+        if (! is_array($this->value) || ! array_is_list($this->value)) {
+            throw $this->notA('list');
+        }
+
+        $values = [];
+
+        foreach ($this->value as $value) {
+            $values[] = is_scalar($value) || $value === null ? $value : throw $this->notA('list of single values');
+        }
+
+        return $values;
+    }
+
+    private function notA(string $shape): LogicException
+    {
+        return new LogicException("The [{$this->operator}] filter's value is not a {$shape}.");
     }
 }

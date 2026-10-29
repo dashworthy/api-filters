@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
+use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
+use Dashworthy\ApiFilters\Data\FilterData;
+use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Workbench\App\Models\Order;
 
@@ -165,4 +169,104 @@ describe('database adapters', function () use ($filter, $set) {
 
         ApiFilters::for(Order::on('testing'))->filter([$set('and', $filter('status', 'equals', 'open'))]);
     })->throws(BindingResolutionException::class);
+});
+
+describe('apps add their own operations', function () use ($codes, $filter, $set) {
+    /*
+     | The README's example: keeps the rows whose point column lies inside a
+     | polygon, sent as a closed ring of [longitude, latitude] positions.
+     */
+    $withinPolygon = new class implements FilterOperationContract
+    {
+        public function canHandle(FilterData $filterData): bool
+        {
+            return $filterData->operator === 'withinPolygon';
+        }
+
+        public function rules(): array
+        {
+            return [
+                'bail',
+                'required',
+                'list',
+                'min:4',
+                'max:1000',
+                function (string $attribute, array $ring, Closure $fail): void {
+                    $isPosition = fn (mixed $position): bool => is_array($position) && array_is_list($position)
+                        && count($position) === 2 && is_numeric($position[0]) && is_numeric($position[1]);
+
+                    if (array_filter($ring, $isPosition) !== $ring || $ring[0] != $ring[array_key_last($ring)]) {
+                        $fail('The :attribute must be a closed ring of [longitude, latitude] positions.');
+                    }
+                },
+            ];
+        }
+
+        public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+        {
+            $ring = array_map(fn (array $position): array => array_map(floatval(...), $position), $filterData->value);
+            $polygon = json_encode(['type' => 'Polygon', 'coordinates' => [$ring]], JSON_THROW_ON_ERROR);
+            $column = $query->getQuery()->getGrammar()->wrap($filterData->column);
+
+            return $query->whereRaw("ST_Contains(ST_GeomFromGeoJSON(?), {$column})", [$polygon], $filterSetOperator->value);
+        }
+    };
+
+    $square = [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]];
+
+    beforeEach(fn () => Order::factory()->createMany([
+        ['code' => 'inside', 'team_id' => 1, 'status' => 'open', 'location' => DB::raw("ST_GeomFromText('POINT(1 1)')")],
+        ['code' => 'outside', 'team_id' => 1, 'status' => 'open', 'location' => DB::raw("ST_GeomFromText('POINT(5 5)')")],
+        ['code' => 'nowhere', 'team_id' => 1, 'status' => 'open'],
+        ['code' => 'other-team', 'team_id' => 2, 'status' => 'closed', 'location' => DB::raw("ST_GeomFromText('POINT(1 1)')")],
+    ]));
+
+    it('filters with an operation listed in the config', function () use ($codes, $filter, $set, $square, $withinPolygon) {
+        config()->push('api-filters.operations', $withinPolygon);
+
+        expect($codes([$set('and', $filter('location', 'withinPolygon', $square))]))->toBe(['inside', 'other-team']);
+    });
+
+    it('checks the value against the operation\'s rules', function () use ($filter, $set, $withinPolygon) {
+        config()->push('api-filters.operations', $withinPolygon);
+
+        ApiFilters::for(Order::query())->filter([$set('and', $filter('location', 'withinPolygon', [[0, 0], [2, 0], [2, 2], [0, 2]]))]);
+    })->throws(ValidationException::class, 'The value must be a closed ring of [longitude, latitude] positions.');
+
+    it('keeps the operation inside the developer\'s constraints', function () use ($codes, $filter, $set, $square, $withinPolygon) {
+        config()->push('api-filters.operations', $withinPolygon);
+
+        expect($codes(
+            [$set('or', $filter('location', 'withinPolygon', $square), $filter('status', 'equals', 'closed'))],
+            Order::query()->where('team_id', 1),
+        ))->toBe(['inside']);
+    });
+
+    it('lets an operation listed first replace a built-in one', function () use ($codes, $filter, $set) {
+        config()->prepend('api-filters.operations', new class implements FilterOperationContract
+        {
+            public function canHandle(FilterData $filterData): bool
+            {
+                return $filterData->operator === 'equals';
+            }
+
+            public function rules(): array
+            {
+                return ['required', 'string'];
+            }
+
+            public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+            {
+                return $adapter->whereLike($query, $filterData->column, $filterData->stringValue().'%', $filterSetOperator->value);
+            }
+        });
+
+        expect($codes([$set('and', $filter('code', 'equals', 'out'))]))->toBe(['outside']);
+    });
+
+    it('refuses an entry that is not an operation', function () use ($filter, $set) {
+        config()->push('api-filters.operations', stdClass::class);
+
+        ApiFilters::for(Order::query())->filter([$set('and', $filter('status', 'equals', 'open'))]);
+    })->throws(LogicException::class, 'Every entry in api-filters.operations must implement Dashworthy\ApiFilters\Contracts\FilterOperationContract.');
 });

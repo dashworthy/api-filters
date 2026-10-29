@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Dashworthy\ApiFilters\Enums;
 
 /**
- * The operators a client may name in a filter's filter_operator.
+ * The operators the package ships, as a client names them in filter_operator.
+ * Each is handled by a built-in operation; api-filters.operations can add
+ * others.
  */
 enum FilterOperator: string
 {

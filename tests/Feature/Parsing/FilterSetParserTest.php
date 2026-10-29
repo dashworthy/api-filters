@@ -2,12 +2,16 @@
 
 declare(strict_types=1);
 
+use Dashworthy\ApiFilters\Adapters\MariaDbAdapter;
 use Dashworthy\ApiFilters\Columns\ColumnResolver;
+use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
+use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Data\FilterSetData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
+use Dashworthy\ApiFilters\Filtering\FilterApplier;
 use Dashworthy\ApiFilters\Parsing\FilterSetParser;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\ValidationException;
 use Workbench\App\Models\Order;
 
@@ -19,7 +23,7 @@ mutates(FilterSetParser::class);
  */
 $errors = function (mixed $filterSets): array {
     try {
-        (new FilterSetParser(new ColumnResolver))->parse($filterSets, new Order);
+        (new FilterSetParser(new ColumnResolver, filterApplier()))->parse($filterSets, new Order);
     } catch (ValidationException $exception) {
         return $exception->errors();
     }
@@ -36,29 +40,68 @@ $filter = fn (string $field, string $operator, mixed $value): array => [
 $set = fn (array ...$filters): array => ['filter_set_operator' => 'and', 'filters' => $filters];
 
 it('returns typed filter sets with the qualified schema columns', function () use ($filter) {
-    $filterSets = (new FilterSetParser(new ColumnResolver))->parse([
+    $filterSets = (new FilterSetParser(new ColumnResolver, filterApplier()))->parse([
         ['filter_set_operator' => 'or', 'filters' => [$filter('STATUS', 'equals', 'open'), $filter('notes', 'in', ['null', 'rush'])]],
     ], new Order);
 
     expect($filterSets)->toEqual([
         new FilterSetData(FilterSetOperator::Or, [
-            new FilterData('orders.status', FilterOperator::Equals, 'open'),
-            new FilterData('orders.notes', FilterOperator::In, values: [null, 'rush']),
+            new FilterData('orders.status', 'equals', 'open'),
+            new FilterData('orders.notes', 'in', [null, 'rush']),
         ]),
     ]);
 });
 
 describe('unsupported operators are rejected', function () use ($errors, $filter, $set) {
-    it('rejects an unsupported operator', function () use ($errors, $filter, $set) {
-        expect(array_keys($errors([$set($filter('total', 'between', [1, 2]))])))
-            ->toBe(['filter_sets.0.filters.0.filter_operator']);
+    it('rejects an operator no operation can handle', function () use ($errors, $filter, $set) {
+        expect($errors([$set($filter('total', 'between', [1, 2]))]))
+            ->toBe(['filter_sets.0.filters.0.filter_operator' => ['This filter operator is not supported.']]);
+    });
+
+    it('reports an unknown field and an unknown operator together', function () use ($errors, $filter, $set) {
+        expect(array_keys($errors([$set($filter('nope', 'between', [1, 2]))])))
+            ->toBe(['filter_sets.0.filters.0.field', 'filter_sets.0.filters.0.filter_operator']);
+    });
+});
+
+describe('values are checked against the rules of the operation that handles them', function () use ($filter, $set) {
+    $between = new class implements FilterOperationContract
+    {
+        public function canHandle(FilterData $filterData): bool
+        {
+            return $filterData->operator === 'between';
+        }
+
+        public function rules(): array
+        {
+            return ['required', 'list', 'size:2'];
+        }
+
+        public function handle(Builder $query, FilterData $filterData, FilterSetOperator $filterSetOperator, DatabaseAdapterContract $adapter): Builder
+        {
+            return $query->whereBetween($filterData->column, $filterData->listValue(), $filterSetOperator->value);
+        }
+    };
+
+    it('accepts a value that passes the rules', function () use ($between, $filter, $set) {
+        $filterSets = (new FilterSetParser(new ColumnResolver, new FilterApplier(new MariaDbAdapter, [$between])))
+            ->parse([$set($filter('total', 'between', [1, 2]))], new Order);
+
+        expect($filterSets[0]->filters)->toEqual([new FilterData('orders.total', 'between', [1, 2])]);
+    });
+
+    it('reports the rules a value fails', function () use ($between, $filter, $set) {
+        $parse = fn () => (new FilterSetParser(new ColumnResolver, new FilterApplier(new MariaDbAdapter, [$between])))
+            ->parse([$set($filter('total', 'between', [1]))], new Order);
+
+        expect($parse)->toThrow(ValidationException::class, 'The value field must contain 2 items.');
     });
 });
 
 describe('filter values must fit their operator', function () use ($errors, $filter, $set) {
     it('requires a list for in', function () use ($errors, $filter, $set) {
         expect($errors([$set($filter('status', 'in', 'open'))]))
-            ->toBe(['filter_sets.0.filters.0.value' => ['This value does not fit the filter operator.']]);
+            ->toBe(['filter_sets.0.filters.0.value' => ['The value field must be a list.']]);
     });
 
     it('rejects an empty in list', function () use ($errors, $filter, $set) {
@@ -66,7 +109,8 @@ describe('filter values must fit their operator', function () use ($errors, $fil
     });
 
     it('rejects a nested list for in', function () use ($errors, $filter, $set) {
-        expect(array_keys($errors([$set($filter('status', 'in', [['open']]))])))->toBe(['filter_sets.0.filters.0.value']);
+        expect($errors([$set($filter('status', 'in', [['open']]))]))
+            ->toBe(['filter_sets.0.filters.0.value' => ['This value does not fit the filter operator.']]);
     });
 
     it('rejects a keyed list for in', function () use ($errors, $filter, $set) {
@@ -128,7 +172,7 @@ describe('input size is limited', function () use ($errors, $filter, $set) {
 
     it('rejects too many in values', function () use ($errors, $filter, $set) {
         expect($errors([$set($filter('status', 'in', range(1, 101)))]))
-            ->toBe(['filter_sets.0.filters.0.value' => ['No more than 100 values may be listed.']])
+            ->toBe(['filter_sets.0.filters.0.value' => ['The value field must not have more than 100 items.']])
             ->and($errors([$set($filter('status', 'notIn', range(1, 100)))]))->toBe([]);
     });
 
