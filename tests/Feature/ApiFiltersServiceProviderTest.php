@@ -9,6 +9,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Translation\FileLoader;
 use Illuminate\Translation\Translator;
+use Workbench\App\Models\Customer;
 use Workbench\App\Models\Order;
 
 mutates(ApiFiltersServiceProvider::class);
@@ -16,7 +17,7 @@ mutates(ApiFiltersServiceProvider::class);
 it('merges the package config', function () {
     expect(config('api-filters.limits.filter_sets'))->toBe(10)
         ->and(config('api-filters.adapters'))->toBe(['mariadb' => MariaDbAdapter::class])
-        ->and(config('api-filters.operations'))->toHaveCount(16)->each->toImplement(FilterOperationContract::class);
+        ->and(config('api-filters.operations'))->toHaveCount(17)->each->toImplement(FilterOperationContract::class);
 });
 
 it('keeps a host app value over the package default', function () {
@@ -77,3 +78,18 @@ it('filters through the builder macro', function () {
 
     expect($orders->pluck('code')->all())->toBe(['open']);
 });
+
+it('filters through a relation with the macro', function () {
+    Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
+    Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
+
+    $orders = Order::query()->apiFilters([
+        ['filter_set_operator' => 'and', 'filters' => [['field' => 'customer.name', 'filter_operator' => 'equals', 'value' => 'Ada']]],
+    ], allowedRelations: ['customer']);
+
+    expect($orders->pluck('code')->all())->toBe(['ada']);
+});
+
+it('refuses an allowed relation path that is not a string', function () {
+    Order::query()->apiFilters([], allowedRelations: [['customer']]);
+})->throws(LogicException::class, 'Every allowed relation path must be a string.');

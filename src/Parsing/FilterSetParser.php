@@ -10,13 +10,16 @@ use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Contracts\NormalizerContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Data\FilterSetData;
+use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Dashworthy\ApiFilters\Filtering\FilterApplier;
+use Dashworthy\ApiFilters\Relations\RelationAllowList;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use LogicException;
@@ -36,6 +39,7 @@ final class FilterSetParser
 
     public function __construct(
         private readonly ColumnResolver $columns,
+        private readonly RelationAllowList $relations,
         private readonly FilterApplier $applier,
     ) {}
 
@@ -60,12 +64,17 @@ final class FilterSetParser
 
             foreach ($set['filters'] as $filterIndex => $filter) {
                 $path = "filter_sets.{$setIndex}.filters.{$filterIndex}";
-                $column = $this->resolveColumn($model, $filter['field']);
-                $filterData = new FilterData($column ?? '', $filter['filter_operator'], $this->normalize($filter['value']));
+                $target = $this->resolveField($model, $filter['field'], $filter['filter_operator']);
+                $filterData = new FilterData(
+                    $target['column'] ?? '',
+                    $filter['filter_operator'],
+                    $this->normalize($filter['value']),
+                    $target['relation'] ?? null,
+                );
                 $operation = $this->applier->operationFor($filterData);
                 $valueErrors = $operation === null ? [] : $this->valueErrors($operation, $filterData->value);
 
-                if ($column === null) {
+                if ($target === null) {
                     $errors["{$path}.field"][] = $this->message('not_filterable');
                 }
 
@@ -116,17 +125,34 @@ final class FilterSetParser
     }
 
     /**
-     * The qualified column a field names. A dotted field is a relation path,
-     * and no relation is filterable until the developer allows it, so it is
-     * rejected without ever reaching the model.
+     * The column and relation path a field names, or null when it names
+     * nothing filterable. A plain field is a qualified column of the query's
+     * model. A dotted field is an allow-listed relation path and a column of
+     * the model it reaches, which the applier qualifies inside the relation's
+     * subquery. For doesntHave the whole field is the path. A client's path is
+     * only looked up, never handed to the model: what comes back is the
+     * developer's spelling from the allow-list.
+     *
+     * @return array{column: string, relation: string|null}|null
      */
-    private function resolveColumn(Model $model, string $field): ?string
+    private function resolveField(Model $model, string $field, string $operator): ?array
     {
-        if (str_contains($field, '.')) {
-            return null;
+        if ($operator === FilterOperator::DoesntHave->value) {
+            $relation = $this->relations->find($field);
+
+            return $relation === null ? null : ['column' => '', 'relation' => $relation['path']];
         }
 
-        return $this->columns->resolve($model, $field);
+        if (! str_contains($field, '.')) {
+            $column = $this->columns->resolve($model, $field);
+
+            return $column === null ? null : ['column' => $column, 'relation' => null];
+        }
+
+        $relation = $this->relations->find(Str::beforeLast($field, '.'));
+        $column = $relation === null ? null : $this->columns->column($relation['model'], Str::afterLast($field, '.'));
+
+        return $relation === null || $column === null ? null : ['column' => $column, 'relation' => $relation['path']];
     }
 
     /**

@@ -95,8 +95,28 @@ These operators ship with the package. You can [add your own](#adding-your-own-o
 | `in`, `notIn` | `IN (…)`, `NOT IN (…)`. A `null` in the list matches NULL rows for `in`; NULL rows never match `notIn` | a non-empty list |
 | `startsWith`, `contains`, `endsWith`, `doesNotContain` | `LIKE` in any letter case. `doesNotContain` also matches NULL rows. A `%` or `_` in the value is a wildcard | a string or number |
 | `dateIs`, `dateIsNot`, `dateBefore`, `dateAfter` | the date part of the column, at any time of day | `YYYY-MM-DD` |
+| `doesntHave` | rows with no related row through the field, which is a [relation path](#filtering-through-relations) | ignored |
 
 The strings `true` and `on`, `false` and `off`, and `null` are read as `true`, `false` and `null`, element by element in a list. Every other string, numeric ones included, is compared as sent, so `"007"` never matches `7`. The `normalizers` key in `config/api-filters.php` lists the classes that do this. Each implements `Dashworthy\ApiFilters\Contracts\NormalizerContract` and hands its result to `$next`; an empty list switches them off.
+
+### Filtering through relations
+
+A dotted field such as `customer.name` filters through a relation, once the query allow-lists its path:
+
+```php
+Order::query()->apiFilters($filterSets, allowedRelations: ['customer', 'lineItems.product']);
+
+ApiFilters::for($query)->allowedRelations(['customer', 'lineItems.product'])->filter($filterSets);
+```
+
+- **Paths.** Write a path as the model's relation method names joined by dots. A path also allows each shorter path it starts with, so `lineItems.product` allows `lineItems` as well.
+- **Spelling.** Clients may write a segment in snake_case: `line_items.quantity` matches `lineItems`.
+- **Matching.** `customer.name equals Ada` matches the orders with at least one related row where the condition holds. Two filters on the same relation match on their own, so each can be met by a different related row.
+- **Related columns** follow the related model's rules. A hidden column of `Customer` is rejected with the same message as an unknown one.
+- **`doesntHave`** takes a relation path as its field and matches the rows with no related row: `{ "field": "lineItems", "filter_operator": "doesntHave", "value": null }`.
+- **Declared relations only.** Every segment must be a public method that declares an Eloquent relation as its return type, such as `public function customer(): BelongsTo`. `allowedRelations()` checks each one before any input is read, and throws a `LogicException` otherwise. A relation method without a return type needs one first.
+
+Eloquent calls the method a relation path names to build the relation. Without an allow-list, a client that sends `truncate.id` makes Eloquent call `Order::truncate()`, which empties the table. Here a client's path is only ever looked up in your list. What reaches Eloquent is your spelling of the path, and each listed method was checked before it was ever called.
 
 ### Adding your own operators
 
@@ -181,7 +201,7 @@ The rest is up to you. Bind every value, as the `?` in `whereRaw()` does above, 
 
 - **Columns.** A field must be a real column of the model's table, matched in any letter case, that the model does not hide (`$hidden`, or missing from a non-empty `$visible`). Fields such as `password` and `remember_token` cannot be filtered.
 - **Every visible column is filterable.** `$hidden` and `$visible` are the boundary. A column you forget to hide can be probed one character at a time, for example with `password startsWith $2y$10$a`, so hide anything a client must not search.
-- **Relations.** A dotted field such as `customer.name` is rejected. Clients never choose which method is called on your model.
+- **Relations.** A dotted field works only through a path you allow-list. Clients never choose which method is called on your model.
 - **Mistakes.** An unknown operator, a bad value or a field that cannot be used returns a 422 validation error keyed by its input path, for example `filter_sets.0.filters.1.field`. An unknown column and a hidden one get the same message.
 
 ### Databases
@@ -212,7 +232,6 @@ Every limit can be changed in `config/api-filters.php`:
 > [!NOTE]
 > Not available yet. The next 0.x releases are designed to ship these, and they may change before 1.0.
 
-- **Relation filters.** A dotted field such as `customer.name` will work once the query allow-lists `customer`: `->apiFilters($filterSets, allowedRelations: ['customer'])`. Adds `doesntHave`, which matches rows with no related row.
 - **Sorting.** `sorts[]{field, sort_operator}` with `asc`, `desc` or `none`, through `->apiSorts($sorts, allowedRelations: ['customer'])`. Only to-one relations can be sorted on. Up to 5 sorts.
 - **Form requests.** Extend `FilterableRequest`, which validates `filter_sets`, `sorts`, `first` and `last`, and declare `allowedRelations()`. Then `->apiFiltersAndSorts($request)` applies the filters, then the sorts, then the `first`/`last` window of up to 1000 rows.
 

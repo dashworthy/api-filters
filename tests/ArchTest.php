@@ -44,6 +44,7 @@ arch('every class keeps to the approved directories')
         'Filtering',
         'Normalizers' => NormalizerContract::class,
         'Parsing',
+        'Relations',
     ], beneath: 'Dashworthy\ApiFilters')
     ->ignoring([ApiFiltersServiceProvider::class, ApiFilters::class]);
 
@@ -76,6 +77,7 @@ arch('every class is named for its directory')
         'Filtering' => 'Applier',
         'Normalizers' => 'Normalizer',
         'Parsing' => 'Parser',
+        'Relations' => 'AllowList',
     ], beneath: 'Dashworthy\ApiFilters');
 
 /*

@@ -41,3 +41,9 @@ it('refuses a value that is not a list', function (mixed $value) {
 it('refuses a nested list', function () {
     (new FilterData('orders.notes', 'in', [['rush']]))->listValue();
 })->throws(LogicException::class, "The [in] filter's value is not a list of single values.");
+
+it('copies itself onto another spelling of its column', function () {
+    $filterData = new FilterData('sku', 'equals', 'SKU-1', 'lineItems.product');
+
+    expect($filterData->withColumn('products.sku'))->toEqual(new FilterData('products.sku', 'equals', 'SKU-1', 'lineItems.product'));
+});

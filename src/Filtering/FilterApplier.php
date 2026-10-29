@@ -7,6 +7,7 @@ namespace Dashworthy\ApiFilters\Filtering;
 use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
+use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -14,7 +15,11 @@ use LogicException;
 
 /**
  * Hands each filter to the first operation that can handle it, with the
- * adapter for the query's database.
+ * adapter for the query's database. A filter through a relation runs inside
+ * has(), joined by the set's operator, so it matches rows with at least one
+ * related row that satisfies it, and its column is qualified there against the
+ * related table. doesntHave names the relation itself, so it is handed the
+ * set's group.
  */
 final class FilterApplier
 {
@@ -38,7 +43,24 @@ final class FilterApplier
         $operation = $this->operationFor($filterData)
             ?? throw new LogicException("No api-filters operation can handle the [{$filterData->operator}] operator.");
 
-        $operation->handle($group, $filterData, $filterSetOperator, $this->adapter);
+        if ($filterData->relation === null || $filterData->operator === FilterOperator::DoesntHave->value) {
+            $operation->handle($group, $filterData, $filterSetOperator, $this->adapter);
+
+            return;
+        }
+
+        $group->has(
+            $filterData->relation,
+            '>=',
+            1,
+            $filterSetOperator->value,
+            fn (Builder $related) => $operation->handle(
+                $related,
+                $filterData->withColumn($related->qualifyColumn($filterData->column)),
+                FilterSetOperator::And,
+                $this->adapter,
+            ),
+        );
     }
 
     /**

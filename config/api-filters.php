@@ -13,6 +13,7 @@ use Dashworthy\ApiFilters\FilterOperations\Equality\GreaterThan;
 use Dashworthy\ApiFilters\FilterOperations\Equality\GreaterThanOrEqualTo;
 use Dashworthy\ApiFilters\FilterOperations\Equality\LessThan;
 use Dashworthy\ApiFilters\FilterOperations\Equality\LessThanOrEqualTo;
+use Dashworthy\ApiFilters\FilterOperations\Relations\DoesntHave;
 use Dashworthy\ApiFilters\FilterOperations\Sets\In;
 use Dashworthy\ApiFilters\FilterOperations\Sets\NotIn;
 use Dashworthy\ApiFilters\FilterOperations\Text\Contains;
@@ -73,6 +74,7 @@ return [
         DateIsNot::class,
         DateBefore::class,
         DateAfter::class,
+        DoesntHave::class,
     ],
 
     /*

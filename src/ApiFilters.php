@@ -9,6 +9,7 @@ use Dashworthy\ApiFilters\Contracts\DatabaseAdapterContract;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Filtering\FilterApplier;
 use Dashworthy\ApiFilters\Parsing\FilterSetParser;
+use Dashworthy\ApiFilters\Relations\RelationAllowList;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -18,9 +19,11 @@ use LogicException;
 
 /**
  * Applies a request's filter sets to an Eloquent query. Only visible columns of
- * the query's model can be filtered, every value is checked against its
- * operator, and each set is applied inside its own where group, so filters can
- * narrow the query but never widen the constraints applied before them.
+ * the query's model, and of the models reached through relation paths the
+ * developer allows, can be filtered. Every value is checked against the rules
+ * of the operation that applies it, and each set is applied inside its own
+ * where group, so filters can narrow the query but never widen the constraints
+ * applied before them.
  *
  * @template TModel of Model
  */
@@ -28,12 +31,15 @@ final class ApiFilters
 {
     private readonly ColumnResolver $columns;
 
+    private RelationAllowList $relations;
+
     /**
      * @param  Builder<TModel>  $query
      */
     private function __construct(private readonly Builder $query)
     {
         $this->columns = new ColumnResolver;
+        $this->relations = new RelationAllowList($query->getModel(), []);
     }
 
     /**
@@ -50,6 +56,24 @@ final class ApiFilters
     }
 
     /**
+     * Allow clients to filter through these relation paths, written as the
+     * model's relation method names joined by dots, such as lineItems.product.
+     * A path also allows each shorter path it starts with. Every segment is
+     * checked here, before any client input is read.
+     *
+     * @param  list<string>  $paths
+     * @return $this
+     *
+     * @throws LogicException when a segment is not a relation method
+     */
+    public function allowedRelations(array $paths): self
+    {
+        $this->relations = new RelationAllowList($this->query->getModel(), $paths);
+
+        return $this;
+    }
+
+    /**
      * Apply a request's filter_sets. Every set is validated before any is
      * applied, so a rejected request leaves the query as it was.
      *
@@ -60,7 +84,7 @@ final class ApiFilters
     public function filter(mixed $filterSets): self
     {
         $applier = new FilterApplier($this->adapter(), $this->operations());
-        $filterSets = (new FilterSetParser($this->columns, $applier))->parse($filterSets, $this->query->getModel());
+        $filterSets = (new FilterSetParser($this->columns, $this->relations, $applier))->parse($filterSets, $this->query->getModel());
 
         foreach ($filterSets as $filterSet) {
             $this->query->where(function (Builder $group) use ($applier, $filterSet): void {

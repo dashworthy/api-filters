@@ -26,17 +26,26 @@ final class ColumnResolver
      */
     public function resolve(Model $model, string $field): ?string
     {
+        $column = $this->column($model, $field);
+
+        return $column === null ? null : $model->qualifyColumn($column);
+    }
+
+    /**
+     * The schema's spelling of the column the field names, unqualified, or
+     * null when it names no visible column. The applier qualifies a related
+     * column inside the relation's subquery, against the table name Laravel
+     * uses there, which is an alias for a relation back to the same model.
+     */
+    public function column(Model $model, string $field): ?string
+    {
         if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*\z/', $field) !== 1) {
             return null;
         }
 
         $column = $this->columns($model)[strtolower($field)] ?? null;
 
-        if ($column === null || $this->isHidden($model, $column)) {
-            return null;
-        }
-
-        return $model->qualifyColumn($column);
+        return $column === null || $this->isHidden($model, $column) ? null : $column;
     }
 
     /**
