@@ -129,7 +129,7 @@ ApiFilters::for($query)->allowedRelations(['customer'])->sort($sorts);
 - **Format.** Each sort is `{ "field": "total", "sort_operator": "desc" }`, with `asc`, `desc` or `none`. Sorts apply in order, so a later one only breaks ties, and `none` is skipped.
 - **Fields** follow the filter rules: a visible column of the model, or a dotted field through an allow-listed path. Every rejected field gets the same message.
 - **To-one paths only.** Each segment must be a belongs-to, has-one, morph-one or has-one-through relation, so `customer.country.name` works and `lineItems.quantity` is rejected.
-- **Joins.** A relation sort uses [power joins](https://github.com/kirschbaum-development/eloquent-power-joins)' `orderByLeftPowerJoins()`. It is a left join, so a row without a related row stays and sorts as NULL. The join adds the related table to the query, so qualify your own `where` columns, such as `orders.team_id`, when the related table has a column of the same name.
+- **Joins.** A relation sort uses [power joins](https://github.com/kirschbaum-development/eloquent-power-joins)' `orderByLeftPowerJoins()`. It is a left join, so a row without a related row stays and sorts as NULL. The join adds the related table to the query, so qualify your own `where` columns, such as `orders.team_id`, when the related table has a column of the same name. Each join follows a foreign key, so index the keys on the paths you allow, such as `orders.customer_id`.
 
 ### Result window
 
