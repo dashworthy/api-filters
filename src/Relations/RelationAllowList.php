@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace Dashworthy\ApiFilters\Relations;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Str;
 use LogicException;
@@ -12,17 +17,17 @@ use ReflectionMethod;
 use ReflectionNamedType;
 
 /**
- * The relation paths a developer allows clients to filter through. A client's
- * path is only ever a key into this list: what reaches Eloquent is the
- * developer's spelling, and every listed segment was checked by reflection to
- * be a method that can only build a relation before it was ever called.
+ * The relation paths a developer allows clients to filter and sort through. A
+ * client's path is only ever a key into this list: what reaches Eloquent is
+ * the developer's spelling, and every listed segment was checked by reflection
+ * to be a method that can only build a relation before it was ever called.
  */
 final class RelationAllowList
 {
     /**
      * Every allowed path and each of its prefixes, keyed by camel-cased segments.
      *
-     * @var array<string, array{path: string, model: Model}>
+     * @var array<string, array{path: string, model: Model, toOne: bool}>
      */
     private array $paths = [];
 
@@ -39,10 +44,11 @@ final class RelationAllowList
     }
 
     /**
-     * The developer's spelling of a client's path and the model it reaches, or
-     * null when it is not allowed.
+     * The developer's spelling of a client's path, the model it reaches, and
+     * whether every segment reaches at most one row, or null when the path is
+     * not allowed.
      *
-     * @return array{path: string, model: Model}|null
+     * @return array{path: string, model: Model, toOne: bool}|null
      */
     public function find(string $clientPath): ?array
     {
@@ -52,12 +58,15 @@ final class RelationAllowList
     private function allow(Model $model, string $path): void
     {
         $spelling = [];
+        $toOne = true;
 
         foreach (explode('.', $path) as $segment) {
-            $model = $this->relation($model, $segment, $path)->getRelated();
+            $relation = $this->relation($model, $segment, $path);
+            $model = $relation->getRelated();
             $spelling[] = $segment;
+            $toOne = $toOne && $this->isToOne($relation);
 
-            $this->paths[$this->key(implode('.', $spelling))] = ['path' => implode('.', $spelling), 'model' => $model];
+            $this->paths[$this->key(implode('.', $spelling))] = ['path' => implode('.', $spelling), 'model' => $model, 'toOne' => $toOne];
         }
     }
 
@@ -90,6 +99,21 @@ final class RelationAllowList
         }
 
         return $relation;
+    }
+
+    /**
+     * Whether the relation reaches at most one row with a related model known
+     * up front. A morph-to's related model differs from row to row.
+     *
+     * @param  Relation<Model, Model, mixed>  $relation
+     */
+    private function isToOne(Relation $relation): bool
+    {
+        return ! $relation instanceof MorphTo
+            && ($relation instanceof BelongsTo
+                || $relation instanceof HasOne
+                || $relation instanceof MorphOne
+                || $relation instanceof HasOneThrough);
     }
 
     private function key(string $path): string

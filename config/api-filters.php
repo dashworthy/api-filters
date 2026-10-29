@@ -83,7 +83,8 @@ return [
     |
     | Input over a limit is rejected with a validation error. filter_sets caps
     | the filter sets in one request, filters caps the filters across all of
-    | its sets, and in_values caps the values listed in one in or notIn filter.
+    | its sets, in_values caps the values listed in one in or notIn filter,
+    | sorts caps the sorts, and window caps the rows between first and last.
     |
     */
 
@@ -91,6 +92,8 @@ return [
         'filter_sets' => 10,
         'filters' => 50,
         'in_values' => 100,
+        'sorts' => 5,
+        'window' => 1000,
     ],
 
 ];

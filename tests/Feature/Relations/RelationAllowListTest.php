@@ -76,6 +76,15 @@ describe('matching', function () use ($codes) {
             ->and($relation['model'] ?? null)->toBeInstanceOf(Product::class);
     });
 
+    it('marks whether every segment of a path reaches at most one row', function () {
+        $relations = new RelationAllowList(new Order, ['customer.country', 'lineItems.product']);
+
+        expect($relations->find('customer')['toOne'] ?? null)->toBeTrue()
+            ->and($relations->find('customer.country')['toOne'] ?? null)->toBeTrue()
+            ->and($relations->find('lineItems')['toOne'] ?? null)->toBeFalse()
+            ->and($relations->find('lineItems.product')['toOne'] ?? null)->toBeFalse();
+    });
+
     it('finds nothing for a path that is not listed', function () {
         expect((new RelationAllowList(new Order, ['lineItems']))->find('customer'))->toBeNull();
     });

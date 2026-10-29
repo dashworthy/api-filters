@@ -6,6 +6,7 @@ use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\ApiFiltersServiceProvider;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Contracts\NormalizerContract;
+use Illuminate\Foundation\Http\FormRequest;
 
 arch()->preset()->php();
 
@@ -43,6 +44,8 @@ arch('every class keeps to the approved directories')
         'Normalizers' => NormalizerContract::class,
         'Parsing',
         'Relations',
+        'Sorting',
+        'Http' => FormRequest::class,
     ], beneath: 'Dashworthy\ApiFilters')
     ->ignoring([ApiFiltersServiceProvider::class, ApiFilters::class]);
 
@@ -75,6 +78,8 @@ arch('every class is named for its directory')
         'Normalizers' => 'Normalizer',
         'Parsing' => 'Parser',
         'Relations' => 'AllowList',
+        'Sorting' => 'Applier',
+        'Http' => 'Request',
     ], beneath: 'Dashworthy\ApiFilters');
 
 /*
