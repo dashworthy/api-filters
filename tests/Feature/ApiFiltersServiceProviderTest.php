@@ -5,9 +5,11 @@ declare(strict_types=1);
 use Dashworthy\ApiFilters\ApiFiltersServiceProvider;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Translation\FileLoader;
 use Illuminate\Translation\Translator;
+use Workbench\App\Http\Requests\ListOrdersRequest;
 use Workbench\App\Models\Customer;
 use Workbench\App\Models\Order;
 
@@ -91,3 +93,45 @@ it('filters through a relation with the macro', function () {
 it('refuses an allowed relation path that is not a string', function () {
     Order::query()->apiFilters([], allowedRelations: [['customer']]);
 })->throws(LogicException::class, 'Every allowed relation path must be a string.');
+
+it('sorts through the builder macro', function () {
+    Order::factory()->createMany([['code' => 'small', 'total' => 50], ['code' => 'large', 'total' => 500]]);
+
+    expect(Order::query()->apiSorts([['field' => 'total', 'sort_operator' => 'desc']])->pluck('code')->all())->toBe(['large', 'small']);
+});
+
+it('sorts through a relation with the macro', function () {
+    Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
+    Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
+
+    expect(Order::query()->apiSorts([['field' => 'customer.name', 'sort_operator' => 'asc']], allowedRelations: ['customer'])->pluck('code')->all())
+        ->toBe(['ada', 'grace']);
+});
+
+describe('one request applies filters, sorts and window', function () {
+    $request = function (array $input): ListOrdersRequest {
+        $request = ListOrdersRequest::createFrom(Request::create('/orders', 'GET', $input));
+        $request->setContainer(app())->setRedirector(app('redirect'))->validateResolved();
+
+        return $request;
+    };
+
+    $input = [
+        'filter_sets' => [['filter_set_operator' => 'and', 'filters' => [['field' => 'status', 'filter_operator' => 'equals', 'value' => 'open']]]],
+        'sorts' => [['field' => 'total', 'sort_operator' => 'desc']],
+    ];
+
+    beforeEach(fn () => Order::factory()->createMany([
+        ['code' => 'open-50', 'status' => 'open', 'total' => 50],
+        ['code' => 'open-500', 'status' => 'open', 'total' => 500],
+        ['code' => 'closed-900', 'status' => 'closed', 'total' => 900],
+    ]));
+
+    it('applies filters sorts and window from one request', function () use ($request, $input) {
+        expect(Order::query()->apiFiltersAndSorts($request([...$input, 'first' => 0, 'last' => 1]))->pluck('code')->all())->toBe(['open-500']);
+    });
+
+    it('skips the window without first and last', function () use ($request, $input) {
+        expect(Order::query()->apiFiltersAndSorts($request($input))->pluck('code')->all())->toBe(['open-500', 'open-50']);
+    });
+});

@@ -20,7 +20,8 @@
         "php": "^8.4",
         "illuminate/database": "^13.0",
         "illuminate/support": "^13.0",
-        "illuminate/validation": "^13.0"
+        "illuminate/validation": "^13.0",
+        "kirschbaum-development/eloquent-power-joins": "^4.3"
     },
     "require-dev": {
         "dashworthy/pest-plugin-arch-rails": "^0.1",

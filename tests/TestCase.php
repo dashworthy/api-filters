@@ -34,8 +34,15 @@ abstract class TestCase extends Orchestra
      */
     protected function defineDatabaseMigrationsAfterDatabaseRefreshed(): void
     {
+        Schema::create('countries', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->timestamps();
+        });
+
         Schema::create('customers', function (Blueprint $table): void {
             $table->id();
+            $table->unsignedBigInteger('country_id')->nullable();
             $table->string('name');
             $table->string('email');
             $table->string('password');

@@ -11,7 +11,7 @@
 Apply API request filters and sorts to Eloquent queries without trusting client-supplied identifiers.
 
 > [!IMPORTANT]
-> 0.x is in early development. Filtering on a model's own columns works; relation filters, sorting and form requests arrive in the next 0.x releases. The API may change before 1.0.
+> 0.x is in early development. The API may change before 1.0.
 
 ## Installation
 
@@ -118,6 +118,65 @@ ApiFilters::for($query)->allowedRelations(['customer', 'lineItems.product'])->fi
 
 Eloquent calls the method a relation path names to build the relation. Without an allow-list, a client that sends `truncate.id` makes Eloquent call `Order::truncate()`, which empties the table. Here a client's path is only ever looked up in your list. What reaches Eloquent is your spelling of the path, and each listed method was checked before it was ever called.
 
+### Sorting
+
+```php
+Order::query()->apiSorts($request->input('sorts', []), allowedRelations: ['customer']);
+
+ApiFilters::for($query)->allowedRelations(['customer'])->sort($sorts);
+```
+
+- **Format.** Each sort is `{ "field": "total", "sort_operator": "desc" }`, with `asc`, `desc` or `none`. Sorts apply in order, so a later one only breaks ties, and `none` is skipped.
+- **Fields** follow the filter rules: a visible column of the model, or a dotted field through an allow-listed path. Every rejected field gets the same message.
+- **To-one paths only.** Each segment must be a belongs-to, has-one, morph-one or has-one-through relation, so `customer.country.name` works and `lineItems.quantity` is rejected.
+- **Joins.** A relation sort uses [power joins](https://github.com/kirschbaum-development/eloquent-power-joins)' `orderByLeftPowerJoins()`. It is a left join, so a row without a related row stays and sorts as NULL. The join adds the related table to the query, so qualify your own `where` columns, such as `orders.team_id`, when the related table has a column of the same name.
+
+### Result window
+
+`window($first, $last)` keeps the rows from position `first`, counted from zero, up to but not including `last`:
+
+```php
+ApiFilters::for($query)->sort($sorts)->window(0, 50);
+```
+
+`first` must be 0 or more, `last` must come after it, and the window holds at most 1000 rows. Anything else is a 422.
+
+### Form requests
+
+Extend `FilterableRequest` for an endpoint that takes `filter_sets`, `sorts`, `first` and `last`:
+
+```php
+use Dashworthy\ApiFilters\Http\FilterableRequest;
+
+class ListOrdersRequest extends FilterableRequest
+{
+    public function authorize(): bool
+    {
+        return $this->user()->can('viewAny', Order::class);
+    }
+
+    public function allowedRelations(): array
+    {
+        return ['customer', 'lineItems.product'];
+    }
+}
+```
+
+```php
+public function index(ListOrdersRequest $request)
+{
+    return Order::query()
+        ->where('orders.team_id', $request->user()->team_id)
+        ->apiFiltersAndSorts($request)
+        ->get();
+}
+```
+
+- `FilterableRequest` validates the shape of all four keys with the same rules and limits the package applies, and requires `first` and `last` together.
+- `allowedRelations()` allows no relations unless you override it, and it covers both filters and sorts.
+- `apiFiltersAndSorts($request)` applies the filters, then the sorts, then the window when both `first` and `last` were sent.
+- `FilterableRequest` has no `authorize()`, and Laravel lets every request through a form request without one, so add your own.
+
 ### Adding your own operators
 
 An operator is a class that implements `Dashworthy\ApiFilters\Contracts\FilterOperationContract`:
@@ -214,26 +273,20 @@ Every limit can be changed in `config/api-filters.php`:
 | Filter sets per request | `limits.filter_sets` | 10 |
 | Filters across all sets | `limits.filters` | 50 |
 | Values in one `in` or `notIn` list | `limits.in_values` | 100 |
+| Sorts per request | `limits.sorts` | 5 |
+| Rows between `first` and `last` | `limits.window` | 1000 |
 
-### Planned
+### Security model
 
-> [!NOTE]
-> Not available yet. The next 0.x releases are designed to ship these, and they may change before 1.0.
-
-- **Sorting.** `sorts[]{field, sort_operator}` with `asc`, `desc` or `none`, through `->apiSorts($sorts, allowedRelations: ['customer'])`. Only to-one relations can be sorted on. Up to 5 sorts.
-- **Form requests.** Extend `FilterableRequest`, which validates `filter_sets`, `sorts`, `first` and `last`, and declare `allowedRelations()`. Then `->apiFiltersAndSorts($request)` applies the filters, then the sorts, then the `first`/`last` window of up to 1000 rows.
-
-```php
-use Dashworthy\ApiFilters\Http\FilterableRequest;
-
-class ListOrdersRequest extends FilterableRequest
-{
-    public function allowedRelations(): array
-    {
-        return ['customer', 'lineItems.product'];
-    }
-}
-```
+| Threat | What the package does |
+|---|---|
+| A client's relation name calls a model method: `truncate.id` empties the table | A relation path is only looked up in your allow-list, and each listed segment was checked to be a relation method before it was ever called |
+| A client probes a column, such as `password startsWith $2y$10$a` | Only visible columns can be filtered or sorted, named by a plain identifier that exists in the table |
+| An `or` set returns other teams' rows | Each set, and each filter inside it, runs in a where group of its own |
+| Input too large to run cheaply | Limits on filter sets, filters, `in` values, sorts and the window |
+| An unknown operator is ignored, returning every row | An operator that no operation handles is a 422 |
+| A value of the wrong type, such as `in` with a string | Every value is checked against its operation's rules before anything is applied |
+| `%` and `_` in a pattern are LIKE wildcards | They are wildcards by design. They only reach visible columns, and the limits cap how many patterns one request sends |
 
 ## Testing
 

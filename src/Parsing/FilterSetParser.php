@@ -55,8 +55,8 @@ final class FilterSetParser
         $parsed = [];
         $sets = $this->validateShape($filterSets);
 
-        if (array_sum(array_map(count(...), array_column($sets, 'filters'))) > $this->limit('filters')) {
-            $errors['filter_sets'][] = $this->message('too_many_filters', $this->limit('filters'));
+        if (array_sum(array_map(count(...), array_column($sets, 'filters'))) > self::limit('filters')) {
+            $errors['filter_sets'][] = self::message('too_many_filters', self::limit('filters'));
         }
 
         foreach ($sets as $setIndex => $set) {
@@ -75,11 +75,11 @@ final class FilterSetParser
                 $valueErrors = $operations === [] ? [] : $this->valueErrors($operations, $filterData->value);
 
                 if ($target === null) {
-                    $errors["{$path}.field"][] = $this->message('not_filterable');
+                    $errors["{$path}.field"][] = self::message('not_filterable');
                 }
 
                 if ($operations === []) {
-                    $errors["{$path}.filter_operator"][] = $this->message('unsupported_operator');
+                    $errors["{$path}.filter_operator"][] = self::message('unsupported_operator');
                 }
 
                 if ($valueErrors !== []) {
@@ -100,6 +100,32 @@ final class FilterSetParser
     }
 
     /**
+     * The rules for the shape of filter_sets, shared with FilterableRequest.
+     * The caller decides whether filter_sets must be present.
+     *
+     * @return array<string, list<mixed>>
+     */
+    public static function shapeRules(): array
+    {
+        return [
+            'filter_sets' => ['list', 'max:'.self::limit('filter_sets')],
+            'filter_sets.*.filter_set_operator' => ['required', Rule::enum(FilterSetOperator::class)],
+            'filter_sets.*.filters' => ['required', 'list'],
+            'filter_sets.*.filters.*.field' => ['required', 'string'],
+            'filter_sets.*.filters.*.filter_operator' => ['required', 'string'],
+            'filter_sets.*.filters.*.value' => ['present'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function shapeMessages(): array
+    {
+        return ['filter_sets.max' => self::message('too_many_filter_sets', self::limit('filter_sets'))];
+    }
+
+    /**
      * Check the input's shape with Laravel's validator, so a malformed request
      * gets Laravel's own messages before anything else is looked at.
      *
@@ -109,16 +135,10 @@ final class FilterSetParser
      */
     private function validateShape(mixed $filterSets): array
     {
-        $validated = Validator::make(['filter_sets' => $filterSets], [
-            'filter_sets' => ['present', 'list', 'max:'.$this->limit('filter_sets')],
-            'filter_sets.*.filter_set_operator' => ['required', Rule::enum(FilterSetOperator::class)],
-            'filter_sets.*.filters' => ['required', 'list'],
-            'filter_sets.*.filters.*.field' => ['required', 'string'],
-            'filter_sets.*.filters.*.filter_operator' => ['required', 'string'],
-            'filter_sets.*.filters.*.value' => ['present'],
-        ], [
-            'filter_sets.max' => $this->message('too_many_filter_sets', $this->limit('filter_sets')),
-        ])->validate();
+        $rules = self::shapeRules();
+        $rules['filter_sets'] = ['present', ...$rules['filter_sets']];
+
+        $validated = Validator::make(['filter_sets' => $filterSets], $rules, self::shapeMessages())->validate();
 
         /** @var list<array{filter_set_operator: string, filters: list<array{field: string, filter_operator: string, value: mixed}>}> */
         return $validated['filter_sets'];
@@ -204,12 +224,12 @@ final class FilterSetParser
         return $this->pipeline;
     }
 
-    private function limit(string $name): int
+    private static function limit(string $name): int
     {
         return Config::integer("api-filters.limits.{$name}");
     }
 
-    private function message(string $key, ?int $max = null): string
+    private static function message(string $key, ?int $max = null): string
     {
         $message = Lang::get("api-filters::validation.{$key}", $max === null ? [] : ['max' => (string) $max]);
 
