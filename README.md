@@ -141,6 +141,8 @@ ApiFilters::for($query)->sort($sorts)->window(0, 50);
 
 `first` must be 0 or more, `last` must come after it, and the window holds at most 1000 rows. Anything else is a 422.
 
+`ApiFilters::windowRules($first)` returns those rules, keyed `first` and `last`, for a request that validates the window itself. `FilterableRequest` already uses them.
+
 ### Form requests
 
 Extend `FilterableRequest` for an endpoint that takes `filter_sets`, `sorts`, `first` and `last`:
