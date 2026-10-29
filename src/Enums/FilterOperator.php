@@ -27,4 +27,5 @@ enum FilterOperator: string
     case DateIsNot = 'dateIsNot';
     case DateBefore = 'dateBefore';
     case DateAfter = 'dateAfter';
+    case DoesntHave = 'doesntHave';
 }

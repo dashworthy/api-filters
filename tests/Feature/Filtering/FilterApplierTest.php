@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Enums\FilterOperator;
@@ -17,6 +18,7 @@ use Dashworthy\ApiFilters\FilterOperations\Equality\GreaterThan;
 use Dashworthy\ApiFilters\FilterOperations\Equality\GreaterThanOrEqualTo;
 use Dashworthy\ApiFilters\FilterOperations\Equality\LessThan;
 use Dashworthy\ApiFilters\FilterOperations\Equality\LessThanOrEqualTo;
+use Dashworthy\ApiFilters\FilterOperations\Relations\DoesntHave;
 use Dashworthy\ApiFilters\FilterOperations\Sets\In;
 use Dashworthy\ApiFilters\FilterOperations\Sets\NotIn;
 use Dashworthy\ApiFilters\FilterOperations\Text\Contains;
@@ -24,9 +26,26 @@ use Dashworthy\ApiFilters\FilterOperations\Text\DoesNotContain;
 use Dashworthy\ApiFilters\FilterOperations\Text\EndsWith;
 use Dashworthy\ApiFilters\FilterOperations\Text\StartsWith;
 use Illuminate\Database\Eloquent\Builder;
+use Workbench\App\Models\Customer;
+use Workbench\App\Models\LineItem;
 use Workbench\App\Models\Order;
+use Workbench\App\Models\Product;
 
 mutates(FilterApplier::class);
+
+/*
+ | $codes filters an orders query through the engine, with an allow-list, and
+ | returns the matching orders' codes. $filter builds the wire format.
+ */
+$codes = fn (array $allowedRelations, string $setOperator, array $filters, ?Builder $query = null): array => ApiFilters::for($query ?? Order::query())
+    ->allowedRelations($allowedRelations)
+    ->filter([['filter_set_operator' => $setOperator, 'filters' => $filters]])
+    ->query()
+    ->orderBy('code')
+    ->pluck('code')
+    ->all();
+
+$filter = fn (string $field, string $operator, mixed $value): array => ['field' => $field, 'filter_operator' => $operator, 'value' => $value];
 
 /*
  | $either is an operation that ORs two values of a column, to show an OR in an
@@ -73,6 +92,7 @@ it('finds the built-in operation for each operator', function (FilterOperator $o
     'dateIsNot' => [FilterOperator::DateIsNot, DateIsNot::class],
     'dateBefore' => [FilterOperator::DateBefore, DateBefore::class],
     'dateAfter' => [FilterOperator::DateAfter, DateAfter::class],
+    'doesntHave' => [FilterOperator::DoesntHave, DoesntHave::class],
 ]);
 
 it('finds no operation for an operator none can handle', function () {
@@ -156,4 +176,63 @@ it('keeps an or in an operation\'s condition within its filter', function () use
     });
 
     expect($query->pluck('code')->all())->toBe(['open-rush']);
+});
+
+describe('relations', function () use ($codes, $filter) {
+    it('filters through an allow-listed relation', function () use ($codes, $filter) {
+        Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
+        Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
+
+        expect($codes(['customer'], 'and', [$filter('customer.name', 'equals', 'Ada')]))->toBe(['ada']);
+    });
+
+    it('filters through a nested path', function () use ($codes, $filter) {
+        LineItem::factory()->for(Order::factory()->state(['code' => 'sku-1']))->for(Product::factory()->state(['sku' => 'SKU-1']))->create();
+        LineItem::factory()->for(Order::factory()->state(['code' => 'sku-2']))->for(Product::factory()->state(['sku' => 'SKU-2']))->create();
+
+        expect($codes(['lineItems.product'], 'and', [$filter('lineItems.product.sku', 'equals', 'SKU-1')]))->toBe(['sku-1']);
+    });
+
+    it('ors a relation filter with its set', function () use ($codes, $filter) {
+        $grace = Customer::factory()->create(['name' => 'Grace']);
+        Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada-open', 'status' => 'open']);
+        Order::factory()->for($grace)->createMany([['code' => 'grace-closed', 'status' => 'closed'], ['code' => 'grace-open', 'status' => 'open']]);
+
+        expect($codes(['customer'], 'or', [$filter('status', 'equals', 'closed'), $filter('customer.name', 'equals', 'Ada')]))
+            ->toBe(['ada-open', 'grace-closed']);
+    });
+
+    it('keeps a relation filter inside the developer\'s constraints', function () use ($codes, $filter) {
+        Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'team-1', 'team_id' => 1, 'status' => 'open']);
+        Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'team-2', 'team_id' => 2, 'status' => 'closed']);
+
+        expect($codes(['customer'], 'or', [$filter('customer.name', 'equals', 'Ada'), $filter('status', 'equals', 'closed')], Order::query()->where('team_id', 1)))
+            ->toBe(['team-1']);
+    });
+
+    it('qualifies a related column that a joined table shares', function () use ($codes, $filter) {
+        $product = Product::factory()->create();
+        LineItem::factory()->for(Order::factory()->state(['code' => 'with']))->for($product)->create();
+        Order::factory()->create(['code' => 'without']);
+
+        expect($codes(['products'], 'and', [$filter('products.id', 'equals', $product->id)]))->toBe(['with']);
+    });
+});
+
+describe('doesnt have', function () use ($codes, $filter) {
+    it('matches rows without related rows', function () use ($codes, $filter) {
+        LineItem::factory()->for(Order::factory()->state(['code' => 'items']))->create();
+        Order::factory()->create(['code' => 'empty']);
+
+        expect($codes(['lineItems'], 'and', [$filter('lineItems', 'doesntHave', null)]))->toBe(['empty']);
+    });
+
+    it('ors doesnt have with its set', function () use ($codes, $filter) {
+        LineItem::factory()->for(Order::factory()->state(['code' => 'open-items', 'status' => 'open']))->create();
+        LineItem::factory()->for(Order::factory()->state(['code' => 'closed-items', 'status' => 'closed']))->create();
+        Order::factory()->create(['code' => 'open-empty', 'status' => 'open']);
+
+        expect($codes(['lineItems'], 'or', [$filter('status', 'equals', 'closed'), $filter('lineItems', 'doesntHave', null)]))
+            ->toBe(['closed-items', 'open-empty']);
+    });
 });

@@ -7,10 +7,11 @@ namespace Dashworthy\ApiFilters\Data;
 use LogicException;
 
 /**
- * One filter: the qualified column it compares, the operator the client named
- * and its normalized value. The operation that handles the operator decides,
- * through its rules(), which values reach it, and reads the value back through
- * the getter for the shape those rules allow.
+ * One filter: the column it compares, the operator the client named, its
+ * normalized value, and the allow-listed relation path it filters through, if
+ * any. The operation that handles the operator decides, through its rules(),
+ * which values reach it, and reads the value back through the getter for the
+ * shape those rules allow.
  */
 final readonly class FilterData
 {
@@ -18,7 +19,17 @@ final readonly class FilterData
         public string $column,
         public string $operator,
         public mixed $value = null,
+        public ?string $relation = null,
     ) {}
+
+    /**
+     * The same filter on another spelling of its column, such as the column
+     * qualified inside a relation's subquery.
+     */
+    public function withColumn(string $column): self
+    {
+        return new self($column, $this->operator, $this->value, $this->relation);
+    }
 
     /**
      * @throws LogicException when the value is a list or an object

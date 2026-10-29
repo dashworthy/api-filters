@@ -1,0 +1,82 @@
+<?php
+
+declare(strict_types=1);
+
+use Dashworthy\ApiFilters\ApiFilters;
+use Dashworthy\ApiFilters\Relations\RelationAllowList;
+use Workbench\App\Models\LineItem;
+use Workbench\App\Models\Order;
+use Workbench\App\Models\Product;
+
+mutates(RelationAllowList::class);
+
+/*
+ | $codes filters an orders query by line item quantity through a client's
+ | path, with an allow-list, and returns the matching orders' codes.
+ */
+$codes = fn (array $allowedRelations, string $field): array => ApiFilters::for(Order::query())
+    ->allowedRelations($allowedRelations)
+    ->filter([['filter_set_operator' => 'and', 'filters' => [['field' => $field, 'filter_operator' => 'gt', 'value' => 2]]]])
+    ->query()
+    ->orderBy('code')
+    ->pluck('code')
+    ->all();
+
+describe('declaration', function () {
+    it('refuses a forwarded builder method', function () {
+        new RelationAllowList(new Order, ['truncate']);
+    })->throws(LogicException::class, 'api-filters cannot allow the relation path [truncate]: [truncate] is not a public method of Workbench\App\Models\Order that declares an Eloquent relation as its return type.');
+
+    it('leaves the table intact when refusing a forwarded method', function () {
+        Order::factory()->count(2)->create();
+
+        try {
+            ApiFilters::for(Order::query())->allowedRelations(['truncate']);
+        } catch (LogicException) {
+        }
+
+        expect(Order::query()->count())->toBe(2);
+    });
+
+    it('refuses a base model method', function () {
+        Order::factory()->count(2)->create();
+
+        expect(fn () => ApiFilters::for(Order::query())->allowedRelations(['save']))
+            ->toThrow(LogicException::class, 'api-filters cannot allow the relation path [save]: [save] is not a public method')
+            ->and(Order::query()->count())->toBe(2);
+    });
+
+    it('refuses a method without a relation return type', function () {
+        new RelationAllowList(new Order, ['legacyCustomer']);
+    })->throws(LogicException::class, 'api-filters cannot allow the relation path [legacyCustomer]: [legacyCustomer] is not a public method');
+
+    it('refuses an unknown nested segment', function () {
+        new RelationAllowList(new Order, ['customer.nope']);
+    })->throws(LogicException::class, 'api-filters cannot allow the relation path [customer.nope]: [nope] is not a public method of Workbench\App\Models\Customer');
+});
+
+describe('matching', function () use ($codes) {
+    beforeEach(function () {
+        LineItem::factory()->for(Order::factory()->state(['code' => 'five']))->create(['quantity' => 5]);
+        LineItem::factory()->for(Order::factory()->state(['code' => 'one']))->create(['quantity' => 1]);
+    });
+
+    it('allows the prefixes of a listed path', function () use ($codes) {
+        expect($codes(['lineItems.product'], 'lineItems.quantity'))->toBe(['five']);
+    });
+
+    it('accepts snake case segments', function () use ($codes) {
+        expect($codes(['lineItems'], 'line_items.quantity'))->toBe(['five']);
+    });
+
+    it('hands back the developer\'s spelling and the model the path reaches', function () {
+        $relation = (new RelationAllowList(new Order, ['lineItems.product']))->find('line_items.product');
+
+        expect($relation['path'] ?? null)->toBe('lineItems.product')
+            ->and($relation['model'] ?? null)->toBeInstanceOf(Product::class);
+    });
+
+    it('finds nothing for a path that is not listed', function () {
+        expect((new RelationAllowList(new Order, ['lineItems']))->find('customer'))->toBeNull();
+    });
+});

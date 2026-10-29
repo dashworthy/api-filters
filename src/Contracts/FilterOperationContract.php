@@ -13,8 +13,9 @@ use Illuminate\Database\Eloquent\Model;
  * api-filters.operations whose canHandle() accepts a filter checks its value
  * against rules(), then adds its condition, and a filter that none can handle
  * is rejected. The package calls handle() inside a where group of the
- * filter's own, joined to the rest of its set by the set's operator, so an
- * operation only writes its own condition.
+ * filter's own, joined to the rest of its set by the set's operator, and for a
+ * relation field inside that relation's has() query with the column qualified
+ * for the related table, so an operation only writes its own condition.
  */
 interface FilterOperationContract
 {

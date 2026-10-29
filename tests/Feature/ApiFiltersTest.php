@@ -97,6 +97,24 @@ describe('relation paths are denied by default', function () use ($filter, $set)
     });
 });
 
+describe('relation names from clients are never called', function () use ($filter, $set) {
+    it('cannot truncate through an unlisted name', function () use ($filter, $set) {
+        Order::factory()->count(2)->create();
+
+        expect(fn () => ApiFilters::for(Order::query())->allowedRelations(['customer'])->filter([$set('and', $filter('truncate.id', 'equals', 1))])->query()->get())
+            ->toThrow(ValidationException::class)
+            ->and(Order::query()->count())->toBe(2);
+    });
+
+    it('cannot save through an unlisted name', function () use ($filter, $set) {
+        Order::factory()->count(2)->create();
+
+        expect(fn () => ApiFilters::for(Order::query())->allowedRelations(['customer'])->filter([$set('and', $filter('save.id', 'equals', 1))])->query()->get())
+            ->toThrow(ValidationException::class)
+            ->and(Order::query()->count())->toBe(2);
+    });
+});
+
 describe('string tokens are normalized', function () use ($codes, $filter, $set) {
     it('matches null for the string null', function () use ($codes, $filter, $set) {
         createOrdersWithNotes();
