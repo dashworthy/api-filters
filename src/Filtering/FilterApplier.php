@@ -52,9 +52,9 @@ final class FilterApplier
             }
 
             $filter->has($filterData->relation, '>=', 1, 'and', function (Builder $related) use ($operations, $filterData): void {
-                $this->handle($related, $operations, $filterData);
+                $this->handle($related, $operations, $filterData->withColumn($related->qualifyColumn($filterData->column)));
             });
-        }, boolean: 'and');
+        }, boolean: $filterSetOperator->value);
     }
 
     /**
