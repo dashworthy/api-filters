@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Dashworthy\ApiFilters;
 
-use Closure;
 use Dashworthy\ApiFilters\Columns\ColumnResolver;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Data\FilterSetData;
@@ -18,16 +17,14 @@ use Dashworthy\ApiFilters\Relations\RelationAllowList;
 use Dashworthy\ApiFilters\Sorting\SortApplier;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Lang;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use LogicException;
 
 /**
- * Applies a request's filter sets, sorts and result window to an Eloquent
- * query. Input is checked as FilterableRequest checks it, then each field
+ * Applies a request's filter sets and sorts to an Eloquent query. Input is
+ * checked as FilterableRequest checks it, then each field
  * against the query's model: only the columns it lists with #[Filterable],
  * and those the models reached through relation paths the developer allows
  * list, can be filtered or sorted. Each set is applied inside its own where
@@ -125,50 +122,6 @@ final class ApiFilters
         }
 
         return $this;
-    }
-
-    /**
-     * Limit the query to the rows from position first, counted from zero, up
-     * to but not including position last.
-     *
-     * @return $this
-     *
-     * @throws ValidationException when first is negative, last is not after first, or the window is over the limit
-     */
-    public function window(int $first, int $last): self
-    {
-        $rules = self::windowRules($first);
-
-        Validator::make(['first' => $first, 'last' => $last], $rules)->validate();
-
-        $this->query->offset($first)->limit($last - $first);
-
-        return $this;
-    }
-
-    /**
-     * The rules a result window's first and last must pass, shared with
-     * FilterableRequest: first is a position, last comes after it, and the
-     * window holds no more than api-filters.limits.window rows.
-     *
-     * @return array{first: list<mixed>, last: list<mixed>}
-     */
-    public static function windowRules(mixed $first): array
-    {
-        $limit = Config::integer('api-filters.limits.window');
-
-        return [
-            'first' => ['integer', 'min:0'],
-            'last' => [
-                'integer',
-                'gt:first',
-                function (string $attribute, mixed $last, Closure $fail) use ($first, $limit): void {
-                    if (is_numeric($first) && is_numeric($last) && $last - $first > $limit) {
-                        $fail(Lang::get('api-filters::validation.window_too_large', ['max' => (string) $limit]));
-                    }
-                },
-            ],
-        ];
     }
 
     /**

@@ -45,7 +45,7 @@ php artisan vendor:publish --tag="api-filters-lang"
 
 ### Request format
 
-A client sends filter sets, sorts and an optional result window:
+A client sends filter sets and sorts:
 
 ```json
 {
@@ -58,9 +58,7 @@ A client sends filter sets, sorts and an optional result window:
             ]
         }
     ],
-    "sorts": [{ "field": "total", "sort_operator": "desc" }],
-    "first": 0,
-    "last": 50
+    "sorts": [{ "field": "total", "sort_operator": "desc" }]
 }
 ```
 
@@ -153,21 +151,9 @@ ApiFilters::for($query)->allowedRelations(['customer'])->sort($sorts);
 - **To-one paths only.** Each segment must be a belongs-to, has-one, morph-one or has-one-through relation, so `customer.country.name` works and `lineItems.quantity` is rejected.
 - **Joins.** A relation sort uses [power joins](https://github.com/kirschbaum-development/eloquent-power-joins)' `orderByLeftPowerJoins()`. It is a left join, so a row without a related row stays and sorts as NULL. The join adds the related table to the query, so qualify your own `where` columns, such as `orders.team_id`, when the related table has a column of the same name. Each join follows a foreign key, so index the keys on the paths you allow, such as `orders.customer_id`.
 
-### Result window
-
-`window($first, $last)` keeps the rows from position `first`, counted from zero, up to but not including `last`:
-
-```php
-ApiFilters::for($query)->sort($sorts)->window(0, 50);
-```
-
-`first` must be 0 or more, `last` must come after it, and the window holds at most 1000 rows. Anything else is a 422.
-
-`ApiFilters::windowRules($first)` returns those rules, keyed `first` and `last`, for a request that validates the window itself. `FilterableRequest` already uses them.
-
 ### Form requests
 
-Extend `FilterableRequest` for an endpoint that takes `filter_sets`, `sorts`, `first` and `last`:
+Extend `FilterableRequest` for an endpoint that takes `filter_sets` and `sorts`:
 
 ```php
 use Dashworthy\ApiFilters\Http\FilterableRequest;
@@ -196,10 +182,10 @@ public function index(ListOrdersRequest $request)
 }
 ```
 
-- `FilterableRequest` checks what the operations decide before your controller runs: the shape and limits of all four keys, an operator that some operation handles, and a value that passes that operation's `rules()` once the normalizers have read it. It requires `first` and `last` together.
+- `FilterableRequest` checks what the operations decide before your controller runs: the shape and limits of both keys, an operator that some operation handles, and a value that passes that operation's `rules()` once the normalizers have read it.
 - The request does not know your model, so it leaves the fields to `apiFiltersAndSorts()`, which checks each one against the query's model and returns a 422 for a field the model does not expose.
 - `allowedRelations()` allows no relations unless you override it, and it covers both filters and sorts.
-- `apiFiltersAndSorts($request)` applies the filters, then the sorts, then the window when both `first` and `last` were sent.
+- `apiFiltersAndSorts($request)` applies the filters, then the sorts.
 - `FilterableRequest` has no `authorize()`, and Laravel lets every request through a form request without one, so add your own.
 
 ### Adding your own operators
@@ -301,7 +287,6 @@ Every limit can be changed in `config/api-filters.php`:
 | Filters across all sets | `limits.filters` | 50 |
 | Values in one `in` or `notIn` list | `limits.in_values` | 100 |
 | Sorts per request | `limits.sorts` | 5 |
-| Rows between `first` and `last` | `limits.window` | 1000 |
 
 ### Security model
 
@@ -311,7 +296,7 @@ Every limit can be changed in `config/api-filters.php`:
 | A client probes a column, such as `password startsWith $2y$10$a` | Only the columns a model lists with `#[Filterable]` can be filtered or sorted. A hidden column never can, even when listed, and a field must be a plain identifier |
 | A morph-to path reaches columns of a model that never listed them | No column can be filtered or sorted through a morph-to, because the model it reaches differs from row to row |
 | An `or` set returns other teams' rows | Each set, and each filter inside it, runs in a where group of its own |
-| Input too large to run cheaply | Limits on filter sets, filters, `in` values, sorts and the window |
+| Input too large to run cheaply | Limits on filter sets, filters, `in` values and sorts |
 | An unknown operator is ignored, returning every row | An operator that no operation handles is a 422 |
 | A value of the wrong type, such as `in` with a string | Every value is checked against its operation's rules before anything is applied |
 | `%` and `_` in a pattern are LIKE wildcards | They are wildcards by design. They only reach exposed columns, and the limits cap how many patterns one request sends |

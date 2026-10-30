@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Dashworthy\ApiFilters\Http;
 
 use Closure;
-use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Contracts\NormalizerContract;
 use Dashworthy\ApiFilters\Data\FilterData;
@@ -22,15 +21,15 @@ use Illuminate\Validation\ValidationException;
 use LogicException;
 
 /**
- * A form request for an endpoint that takes filter_sets, sorts and a first and
- * last window. It checks what the filter operations decide, without knowing
- * the model: the shape and limits of the input, an operator that an operation
- * in api-filters.operations handles, and a value that passes the rules of
- * every operation that handles it, once the configured normalizers have read
- * it. Which fields a client may use depends on the query's model, so the
- * engine checks them when it applies the filters and sorts. Extend it, and
- * override allowedRelations() to let clients filter and sort through
- * relations. Authorization stays with each endpoint's own request.
+ * A form request for an endpoint that takes filter_sets and sorts. It checks
+ * what the filter operations decide, without knowing the model: the shape and
+ * limits of the input, an operator that an operation in
+ * api-filters.operations handles, and a value that passes the rules of every
+ * operation that handles it, once the configured normalizers have read it.
+ * Which fields a client may use depends on the query's model, so the engine
+ * checks them when it applies the filters and sorts. Extend it, and override
+ * allowedRelations() to let clients filter and sort through relations.
+ * Authorization stays with each endpoint's own request.
  */
 abstract class FilterableRequest extends FormRequest
 {
@@ -54,14 +53,7 @@ abstract class FilterableRequest extends FormRequest
      */
     public function rules(): array
     {
-        $window = ApiFilters::windowRules($this->input('first'));
-
-        return [
-            ...self::filterSetRules($this->input('filter_sets')),
-            ...self::sortRules(),
-            'first' => ['required_with:last', ...$window['first']],
-            'last' => ['required_with:first', ...$window['last']],
-        ];
+        return [...self::filterSetRules($this->input('filter_sets')), ...self::sortRules()];
     }
 
     /**

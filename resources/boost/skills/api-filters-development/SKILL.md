@@ -2,7 +2,7 @@
 name: api-filters-development
 description: >
   Apply dashworthy/api-filters in a Laravel app: filter and sort Eloquent
-  queries from API request input (filter_sets, sorts, first, last), choose a
+  queries from API request input (filter_sets, sorts), choose a
   model's exposed columns with #[Filterable], allow-list the relations clients
   may reach, take a whole request through a FilterableRequest, and add custom
   filter operations.
@@ -39,7 +39,7 @@ class ListOrdersRequest extends FilterableRequest
 }
 ```
 
-- `FilterableRequest` checks the shape and limits of `filter_sets`, `sorts`, `first` and `last`, each filter's operator and its value against the operation's `rules()`, before the controller runs. It does not know the model: `apiFiltersAndSorts()` checks each field against the query's model. It has no `authorize()`, so always add one.
+- `FilterableRequest` checks the shape and limits of `filter_sets` and `sorts`, each filter's operator and its value against the operation's `rules()`, before the controller runs. It does not know the model: `apiFiltersAndSorts()` checks each field against the query's model. It has no `authorize()`, so always add one.
 - `allowedRelations()` returns relation method names joined by dots. A path also allows each shorter path it starts with. It allows nothing unless overridden.
 
 ### 2. Apply it after your own constraints
@@ -59,7 +59,7 @@ Without a form request, use the builder macros or the fluent engine:
 ```php
 Order::query()->apiFilters($filterSets, allowedRelations: ['customer']);
 Order::query()->apiSorts($sorts, allowedRelations: ['customer']);
-ApiFilters::for($query)->allowedRelations(['customer'])->filter($filterSets)->sort($sorts)->window(0, 50);
+ApiFilters::for($query)->allowedRelations(['customer'])->filter($filterSets)->sort($sorts);
 ```
 
 ### 3. Add an operator only through api-filters.operations

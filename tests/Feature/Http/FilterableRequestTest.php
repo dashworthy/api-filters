@@ -57,18 +57,6 @@ it('responds 422 for a filter set without an operator', function () {
         ->assertJsonValidationErrors(['filter_sets.0.filter_set_operator']);
 });
 
-it('requires last with first', function () {
-    $this->json('GET', 'orders', ['first' => 0])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors(['last']);
-});
-
-it('rejects a window larger than the limit', function () {
-    $this->json('GET', 'orders', ['first' => 0, 'last' => 1001])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors(['last' => 'No more than 1000 rows may be requested at once.']);
-});
-
 it('rejects too many sorts with the package message', function () {
     $this->json('GET', 'orders', ['sorts' => array_fill(0, 6, ['field' => 'total', 'sort_operator' => 'asc'])])
         ->assertUnprocessable()

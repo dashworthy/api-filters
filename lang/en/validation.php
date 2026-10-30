@@ -10,5 +10,4 @@ return [
     'too_many_filter_sets' => 'No more than :max filter sets may be sent.',
     'too_many_filters' => 'No more than :max filters may be sent across all filter sets.',
     'too_many_sorts' => 'No more than :max sorts may be sent.',
-    'window_too_large' => 'No more than :max rows may be requested at once.',
 ];

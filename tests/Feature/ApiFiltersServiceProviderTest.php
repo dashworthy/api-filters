@@ -108,7 +108,7 @@ it('sorts through a relation with the macro', function () {
         ->toBe(['ada', 'grace']);
 });
 
-describe('one request applies filters, sorts and window', function () {
+describe('one request applies filters and sorts', function () {
     $request = function (array $input): ListOrdersRequest {
         $request = ListOrdersRequest::createFrom(Request::create('/orders', 'GET', $input));
         $request->setContainer(app())->setRedirector(app('redirect'))->validateResolved();
@@ -127,11 +127,7 @@ describe('one request applies filters, sorts and window', function () {
         ['code' => 'closed-900', 'status' => 'closed', 'total' => 900],
     ]));
 
-    it('applies filters sorts and window from one request', function () use ($request, $input) {
-        expect(Order::query()->apiFiltersAndSorts($request([...$input, 'first' => 0, 'last' => 1]))->pluck('code')->all())->toBe(['open-500']);
-    });
-
-    it('skips the window without first and last', function () use ($request, $input) {
+    it('applies filters and sorts from one request', function () use ($request, $input) {
         expect(Order::query()->apiFiltersAndSorts($request($input))->pluck('code')->all())->toBe(['open-500', 'open-50']);
     });
 });

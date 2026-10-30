@@ -49,16 +49,11 @@ class ApiFiltersServiceProvider extends ServiceProvider
 
         Builder::macro('apiFiltersAndSorts', function (FilterableRequest $request): Builder {
             /** @var Builder<Model> $this */
-            $apiFilters = ApiFilters::for($this)
+            return ApiFilters::for($this)
                 ->allowedRelations($request->allowedRelations())
                 ->filter($request->validated('filter_sets', []))
-                ->sort($request->validated('sorts', []));
-
-            if ($request->filled(['first', 'last'])) {
-                $apiFilters->window($request->integer('first'), $request->integer('last'));
-            }
-
-            return $apiFilters->query();
+                ->sort($request->validated('sorts', []))
+                ->query();
         });
 
         if (! $this->app->runningInConsole()) {

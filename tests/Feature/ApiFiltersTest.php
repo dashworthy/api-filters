@@ -335,36 +335,3 @@ describe('sorts', function () {
         expect($query->toRawSql())->toBe($before);
     });
 });
-
-describe('window', function () {
-    $window = fn (int $first, int $last): array => ApiFilters::for(Order::query()->orderBy('id'))->window($first, $last)->query()->pluck('code')->all();
-
-    $errors = function (int $first, int $last): array {
-        try {
-            ApiFilters::for(Order::query())->window($first, $last);
-        } catch (ValidationException $exception) {
-            return $exception->errors();
-        }
-
-        return [];
-    };
-
-    it('returns the rows between first and last', function () use ($window) {
-        Order::factory()->createMany([['code' => 'o1'], ['code' => 'o2'], ['code' => 'o3'], ['code' => 'o4'], ['code' => 'o5']]);
-
-        expect($window(1, 3))->toBe(['o2', 'o3']);
-    });
-
-    it('rejects a negative first', function () use ($errors) {
-        expect(array_keys($errors(-1, 10)))->toBe(['first']);
-    });
-
-    it('rejects a last that is not after first', function () use ($errors) {
-        expect(array_keys($errors(3, 3)))->toBe(['last']);
-    });
-
-    it('rejects a window larger than the limit', function () use ($errors) {
-        expect($errors(0, 1001))->toBe(['last' => ['No more than 1000 rows may be requested at once.']])
-            ->and($errors(0, 1000))->toBe([]);
-    });
-});
