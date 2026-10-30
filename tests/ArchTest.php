@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
+use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\ApiFiltersServiceProvider;
+use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
+use Illuminate\Foundation\Http\FormRequest;
 
 arch()->preset()->php();
 
@@ -26,12 +29,21 @@ arch('the package source declares strict types')
  |
  | The plugin reports a class that sits directly in the module, so the root
  | entry points are named in ignoring(): the service provider, which
- | composer.json registers, and later the engine that applications import.
+ | composer.json registers, and the engine that applications import.
  */
 arch('every class keeps to the approved directories')
     ->expect('Dashworthy\ApiFilters')
-    ->toUseApprovedDirectories([], beneath: 'Dashworthy\ApiFilters')
-    ->ignoring(ApiFiltersServiceProvider::class);
+    ->toUseApprovedDirectories([
+        'Attributes' => fn (string $class): bool => (new ReflectionClass($class))->getAttributes(Attribute::class) !== [],
+        'Contracts' => fn (string $class): bool => interface_exists($class),
+        'Data' => fn (string $class): bool => (new ReflectionClass($class))->isReadOnly(),
+        'Enums' => UnitEnum::class,
+        'FilterOperations' => FilterOperationContract::class,
+        'Filtering',
+        'Relations',
+        'Http' => FormRequest::class,
+    ], beneath: 'Dashworthy\ApiFilters')
+    ->ignoring([ApiFiltersServiceProvider::class, ApiFilters::class]);
 
 /*
  | ignoring() matches by prefix, so it also passes any class or directory whose
@@ -43,7 +55,7 @@ it('keeps only the entry points at the package root', function () {
     $sourceRoot = dirname(__DIR__).'/src';
 
     expect(array_map(basename(...), glob($sourceRoot.'/*.php') ?: []))
-        ->toEqualCanonicalizing(['ApiFiltersServiceProvider.php'])
+        ->toEqualCanonicalizing(['ApiFilters.php', 'ApiFiltersServiceProvider.php'])
         ->and(glob($sourceRoot.'/ApiFilters*', GLOB_ONLYDIR) ?: [])
         ->toBe([]);
 });
@@ -54,13 +66,19 @@ it('keeps only the entry points at the package root', function () {
  */
 arch('every class is named for its directory')
     ->expect('Dashworthy\ApiFilters')
-    ->toUseDirectorySuffixes([], beneath: 'Dashworthy\ApiFilters');
+    ->toUseDirectorySuffixes([
+        'Contracts' => 'Contract',
+        'Data' => 'Data',
+        'Filtering' => 'Applier',
+        'Relations' => 'AllowList',
+        'Http' => 'Request',
+    ], beneath: 'Dashworthy\ApiFilters');
 
 /*
  | dashworthy/pest-plugin-arch-rails: coverage.
  |
  | Every class has a test at its mirrored path. Most classes need a database,
- | so src mirrors into tests/Feature; the plain Data and Normalizers layers
+ | so src mirrors into tests/Feature; the plain Attributes and Data layers
  | mirror into tests/Unit, because the longest matching source root wins.
  | Abstract classes, interfaces, traits and enums are skipped, so enums only
  | declare cases and any behaviour lives in a class that has a test.
@@ -75,6 +93,6 @@ arch('every class has a test at its mirrored path')
     ->expect('Dashworthy\ApiFilters')
     ->toHaveTests([
         $sourceRoot => $testRoot.'/Feature',
+        $sourceRoot.'/Attributes' => $testRoot.'/Unit/Attributes',
         $sourceRoot.'/Data' => $testRoot.'/Unit/Data',
-        $sourceRoot.'/Normalizers' => $testRoot.'/Unit/Normalizers',
     ]);

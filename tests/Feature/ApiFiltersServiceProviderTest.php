@@ -3,27 +3,31 @@
 declare(strict_types=1);
 
 use Dashworthy\ApiFilters\ApiFiltersServiceProvider;
+use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Translation\FileLoader;
 use Illuminate\Translation\Translator;
+use Workbench\App\Models\Customer;
+use Workbench\App\Models\Order;
 
 mutates(ApiFiltersServiceProvider::class);
 
 it('merges the package config', function () {
-    expect(config('api-filters.placeholder'))->toBe('default');
+    expect(config('api-filters.limits.filter_sets'))->toBe(10)
+        ->and(config('api-filters.operations'))->toHaveCount(17)->each->toImplement(FilterOperationContract::class);
 });
 
 it('keeps a host app value over the package default', function () {
-    config()->set('api-filters.placeholder', 'host');
+    config()->set('api-filters.limits', ['filter_sets' => 3]);
 
     (new ApiFiltersServiceProvider(app()))->register();
 
-    expect(config('api-filters.placeholder'))->toBe('host');
+    expect(config('api-filters.limits'))->toBe(['filter_sets' => 3]);
 });
 
 it('loads the package translations', function () {
-    expect(trans('api-filters::messages.placeholder'))->toBe('ApiFilters placeholder translation.');
+    expect(trans('api-filters::validation.not_filterable'))->toBe('This field cannot be filtered.');
 });
 
 it('loads the translations and publishes nothing outside the console', function () {
@@ -33,7 +37,7 @@ it('loads the translations and publishes nothing outside the console', function 
 
     (new ApiFiltersServiceProvider(app()))->boot();
 
-    expect($translator->get('api-filters::messages.placeholder'))->toBe('ApiFilters placeholder translation.')
+    expect($translator->get('api-filters::validation.not_filterable'))->toBe('This field cannot be filtered.')
         ->and(ServiceProvider::pathsToPublish(ApiFiltersServiceProvider::class))->toBe([]);
 });
 
@@ -61,4 +65,30 @@ it('publishes the config file and translations under the api-filters tag', funct
         config_path('api-filters.php'),
         app()->langPath('vendor/api-filters'),
     ]);
+});
+
+describe('apiFiltersAndSorts applies one request', function () {
+    it('applies its filters, then its sorts', function () {
+        Order::factory()->createMany([
+            ['code' => 'open-50', 'status' => 'open', 'total' => 50],
+            ['code' => 'open-500', 'status' => 'open', 'total' => 500],
+            ['code' => 'closed-900', 'status' => 'closed', 'total' => 900],
+        ]);
+
+        $request = filterableRequest([
+            'filter_sets' => [['filter_set_operator' => 'and', 'filters' => [['field' => 'status', 'filter_operator' => 'equals', 'value' => 'open']]]],
+            'sorts' => [['field' => 'total', 'sort_operator' => 'desc']],
+        ]);
+
+        expect(Order::query()->apiFiltersAndSorts($request)->pluck('code')->all())->toBe(['open-500', 'open-50']);
+    });
+
+    it('reaches the relations the model lists', function () {
+        Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
+        Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
+
+        $request = filterableRequest(['sorts' => [['field' => 'customer.name', 'sort_operator' => 'asc']]]);
+
+        expect(Order::query()->apiFiltersAndSorts($request)->pluck('code')->all())->toBe(['ada', 'grace']);
+    });
 });

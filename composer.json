@@ -18,7 +18,10 @@
     ],
     "require": {
         "php": "^8.4",
-        "illuminate/support": "^13.0"
+        "illuminate/database": "^13.0",
+        "illuminate/support": "^13.0",
+        "illuminate/validation": "^13.0",
+        "kirschbaum-development/eloquent-power-joins": "^4.3"
     },
     "require-dev": {
         "dashworthy/pest-plugin-arch-rails": "^0.1",
@@ -73,10 +76,10 @@
             "vendor/bin/pest --type-coverage --min=100"
         ],
         "test:unit": [
-            "vendor/bin/pest --parallel"
+            "vendor/bin/pest"
         ],
         "test:mutate": [
-            "vendor/bin/pest --mutate --parallel --min=100"
+            "vendor/bin/pest --mutate --min=100"
         ],
         "test": [
             "@analyse",

@@ -18,10 +18,24 @@ jobs:
   tests:
     runs-on: ${{ matrix.os }}
 
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: yes
+          MARIADB_DATABASE: api_filters
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
     strategy:
       fail-fast: true
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
         php: [8.4, 8.5]
         laravel: [13.*]
         stability: [prefer-lowest, prefer-stable]
@@ -39,7 +53,7 @@ jobs:
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, pdo_mysql, bcmath, intl
           ini-values: error_reporting=E_ALL
           tools: composer:v2
           coverage: none
@@ -57,19 +71,27 @@ jobs:
         run: composer lint:check
 
       - name: Type Coverage
-        if: runner.os != 'Windows'
         run: composer test:types
 
       - name: Test Suite
-        if: runner.os != 'Windows'
         run: composer test:unit
-
-      - name: Test Suite (Windows)
-        if: runner.os == 'Windows'
-        run: vendor/bin/pest
 
   mutation:
     runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: yes
+          MARIADB_DATABASE: api_filters
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
 
     name: Mutation Testing
 
@@ -81,7 +103,7 @@ jobs:
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: 8.4
-          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, pdo_mysql, bcmath, intl
           ini-values: error_reporting=E_ALL
           tools: composer:v2
           coverage: pcov
