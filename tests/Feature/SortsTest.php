@@ -2,27 +2,22 @@
 
 declare(strict_types=1);
 
-use Dashworthy\ApiFilters\Columns\ColumnResolver;
-use Dashworthy\ApiFilters\Data\SortData;
-use Dashworthy\ApiFilters\Enums\SortOperator;
-use Dashworthy\ApiFilters\Parsing\SortParser;
-use Dashworthy\ApiFilters\Relations\RelationAllowList;
+use Dashworthy\ApiFilters\ApiFilters;
+use Dashworthy\ApiFilters\Http\FilterableRequest;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
 use Workbench\App\Models\Order;
 use Workbench\App\Models\User;
 
-mutates(SortParser::class);
+mutates(FilterableRequest::class, ApiFilters::class);
 
 /*
- | $errors parses sorts for a query with an allow-list and returns the
- | validation errors, keyed by input path. $sort builds the wire format.
+ | $errors sorts a query with an allow-list and returns the validation
+ | errors, keyed by input path. $sort builds the wire format.
  */
 $errors = function (mixed $sorts, array $allowedRelations = [], ?Model $model = null): array {
-    $model ??= new Order;
-
     try {
-        (new SortParser(new ColumnResolver, new RelationAllowList($model, $allowedRelations)))->parse($sorts, $model);
+        ApiFilters::for(($model ?? new Order)->newQuery())->allowedRelations($allowedRelations)->sort($sorts);
     } catch (ValidationException $exception) {
         return $exception->errors();
     }
@@ -32,14 +27,9 @@ $errors = function (mixed $sorts, array $allowedRelations = [], ?Model $model = 
 
 $sort = fn (string $field, string $operator = 'asc'): array => ['field' => $field, 'sort_operator' => $operator];
 
-it('returns typed sorts with the qualified column and the developer\'s path', function () use ($sort) {
-    $sorts = (new SortParser(new ColumnResolver, new RelationAllowList(new Order, ['customer'])))
-        ->parse([$sort('TOTAL', 'desc'), $sort('customer.NAME')], new Order);
-
-    expect($sorts)->toEqual([
-        new SortData('orders.total', SortOperator::Desc),
-        new SortData('name', SortOperator::Asc, 'customer'),
-    ]);
+it('sorts by the qualified column and the developer\'s path, spelled as the models list them', function () use ($sort) {
+    expect(ApiFilters::for(Order::query())->allowedRelations(['customer'])->sort([$sort('TOTAL', 'desc'), $sort('customer.NAME')])->query()->toRawSql())
+        ->toContain('order by `orders`.`total` desc, `customers`.`name` asc');
 });
 
 it('accepts a nested to one path', function () use ($errors, $sort) {

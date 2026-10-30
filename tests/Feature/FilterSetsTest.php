@@ -2,33 +2,36 @@
 
 declare(strict_types=1);
 
-use Dashworthy\ApiFilters\Columns\ColumnResolver;
+use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Data\FilterSetData;
-use Dashworthy\ApiFilters\Enums\FilterSetOperator;
-use Dashworthy\ApiFilters\Filtering\FilterApplier;
-use Dashworthy\ApiFilters\Parsing\FilterSetParser;
-use Dashworthy\ApiFilters\Relations\RelationAllowList;
+use Dashworthy\ApiFilters\Http\FilterableRequest;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\ValidationException;
 use Workbench\App\Models\Order;
 
-mutates(FilterSetParser::class);
+mutates(FilterableRequest::class, ApiFilters::class);
 
 /*
- | $errors parses filter sets for an orders query and returns the validation
- | errors, keyed by input path. $set and $filter build the wire format.
+ | $errors applies filter sets to an orders query and returns the validation
+ | errors, keyed by input path. $sql returns the SQL they make of the query.
+ | $set and $filter build the wire format.
  */
 $errors = function (mixed $filterSets, array $allowedRelations = []): array {
     try {
-        (new FilterSetParser(new ColumnResolver, new RelationAllowList(new Order, $allowedRelations), filterApplier()))->parse($filterSets, new Order);
+        ApiFilters::for(Order::query())->allowedRelations($allowedRelations)->filter($filterSets);
     } catch (ValidationException $exception) {
         return $exception->errors();
     }
 
     return [];
 };
+
+$sql = fn (array $filterSets, array $allowedRelations = []): string => ApiFilters::for(Order::query())
+    ->allowedRelations($allowedRelations)
+    ->filter($filterSets)
+    ->query()
+    ->toRawSql();
 
 $filter = fn (string $field, string $operator, mixed $value): array => [
     'field' => $field,
@@ -38,17 +41,10 @@ $filter = fn (string $field, string $operator, mixed $value): array => [
 
 $set = fn (array ...$filters): array => ['filter_set_operator' => 'and', 'filters' => $filters];
 
-it('returns typed filter sets with the qualified columns', function () use ($filter) {
-    $filterSets = (new FilterSetParser(new ColumnResolver, new RelationAllowList(new Order, []), filterApplier()))->parse([
-        ['filter_set_operator' => 'or', 'filters' => [$filter('STATUS', 'equals', 'open'), $filter('notes', 'in', ['null', 'rush'])]],
-    ], new Order);
-
-    expect($filterSets)->toEqual([
-        new FilterSetData(FilterSetOperator::Or, [
-            new FilterData('orders.status', 'equals', 'open'),
-            new FilterData('orders.notes', 'in', [null, 'rush']),
-        ]),
-    ]);
+it('filters by the qualified columns, spelled as the model lists them', function () use ($filter, $sql) {
+    expect($sql([['filter_set_operator' => 'or', 'filters' => [$filter('STATUS', 'equals', 'open'), $filter('notes', 'in', ['null', 'rush'])]]]))
+        ->toContain("`orders`.`status` = 'open'")
+        ->toContain("`orders`.`notes` in ('rush') or `orders`.`notes` is null");
 });
 
 describe('unsupported operators are rejected', function () use ($errors, $filter, $set) {
@@ -57,13 +53,13 @@ describe('unsupported operators are rejected', function () use ($errors, $filter
             ->toBe(['filter_sets.0.filters.0.filter_operator' => ['This filter operator is not supported.']]);
     });
 
-    it('reports an unknown field and an unknown operator together', function () use ($errors, $filter, $set) {
+    it('reports an unknown operator before it checks the field', function () use ($errors, $filter, $set) {
         expect(array_keys($errors([$set($filter('nope', 'between', [1, 2]))])))
-            ->toBe(['filter_sets.0.filters.0.field', 'filter_sets.0.filters.0.filter_operator']);
+            ->toBe(['filter_sets.0.filters.0.filter_operator']);
     });
 });
 
-describe('values are checked against the rules of the operation that handles them', function () use ($filter, $set) {
+describe('values are checked against the rules of the operation that handles them', function () use ($errors, $filter, $set, $sql) {
     $between = new class implements FilterOperationContract
     {
         public function canHandle(FilterData $filterData): bool
@@ -82,14 +78,13 @@ describe('values are checked against the rules of the operation that handles the
         }
     };
 
-    it('accepts a value that passes the rules', function () use ($between, $filter, $set) {
-        $filterSets = (new FilterSetParser(new ColumnResolver, new RelationAllowList(new Order, []), new FilterApplier([$between])))
-            ->parse([$set($filter('total', 'between', [1, 2]))], new Order);
+    it('accepts a value that passes the rules', function () use ($between, $filter, $set, $sql) {
+        config()->set('api-filters.operations', [$between]);
 
-        expect($filterSets[0]->filters)->toEqual([new FilterData('orders.total', 'between', [1, 2])]);
+        expect($sql([$set($filter('total', 'between', [1, 2]))]))->toContain('`orders`.`total` between 1 and 2');
     });
 
-    it('checks the value against every operation that can handle the filter', function () use ($between, $filter, $set) {
+    it('checks the value against every operation that can handle the filter', function () use ($between, $errors, $filter, $set) {
         $positive = new class implements FilterOperationContract
         {
             public function canHandle(FilterData $filterData): bool
@@ -107,17 +102,17 @@ describe('values are checked against the rules of the operation that handles the
                 return $query;
             }
         };
-        $parse = fn () => (new FilterSetParser(new ColumnResolver, new RelationAllowList(new Order, []), new FilterApplier([$between, $positive])))
-            ->parse([$set($filter('total', 'between', [-1, 2]))], new Order);
+        config()->set('api-filters.operations', [$between, $positive]);
 
-        expect($parse)->toThrow(ValidationException::class, 'The value must not be negative.');
+        expect($errors([$set($filter('total', 'between', [-1, 2]))]))
+            ->toBe(['filter_sets.0.filters.0.value' => ['The value must not be negative.']]);
     });
 
-    it('reports the rules a value fails', function () use ($between, $filter, $set) {
-        $parse = fn () => (new FilterSetParser(new ColumnResolver, new RelationAllowList(new Order, []), new FilterApplier([$between])))
-            ->parse([$set($filter('total', 'between', [1]))], new Order);
+    it('reports the rules a value fails', function () use ($between, $errors, $filter, $set) {
+        config()->set('api-filters.operations', [$between]);
 
-        expect($parse)->toThrow(ValidationException::class, 'The value field must contain 2 items.');
+        expect($errors([$set($filter('total', 'between', [1]))]))
+            ->toBe(['filter_sets.0.filters.0.value' => ['The value field must contain 2 items.']]);
     });
 });
 
@@ -169,11 +164,17 @@ describe('filter values must fit their operator', function () use ($errors, $fil
         'a number' => 20260115,
     ]);
 
-    it('reports every problem at once', function () use ($errors, $filter, $set) {
+    it('reports every value problem at once', function () use ($errors, $filter, $set) {
         expect(array_keys($errors([$set($filter('nope', 'gt', null), $filter('total', 'in', 'x'))])))->toBe([
-            'filter_sets.0.filters.0.field',
             'filter_sets.0.filters.0.value',
             'filter_sets.0.filters.1.value',
+        ]);
+    });
+
+    it('reports every field problem at once', function () use ($errors, $filter, $set) {
+        expect(array_keys($errors([$set($filter('nope', 'equals', 'x')), $set($filter('status', 'equals', 'open'), $filter('internal_reference', 'equals', 'x'))])))->toBe([
+            'filter_sets.0.filters.0.field',
+            'filter_sets.1.filters.1.field',
         ]);
     });
 });
@@ -251,16 +252,11 @@ describe('relation paths are denied by default', function () use ($errors, $filt
     });
 });
 
-describe('relations', function () use ($errors, $filter, $set) {
-    it('returns relation filters with the developer\'s path and an unqualified column', function () use ($filter) {
-        $filterSets = (new FilterSetParser(new ColumnResolver, new RelationAllowList(new Order, ['lineItems.product']), filterApplier()))->parse([
-            ['filter_set_operator' => 'and', 'filters' => [$filter('line_items.product.SKU', 'equals', 'SKU-1'), $filter('line_items', 'doesntHave', null)]],
-        ], new Order);
-
-        expect($filterSets[0]->filters)->toEqual([
-            new FilterData('sku', 'equals', 'SKU-1', 'lineItems.product'),
-            new FilterData('', 'doesntHave', null, 'lineItems'),
-        ]);
+describe('relations', function () use ($errors, $filter, $set, $sql) {
+    it('filters through the developer\'s path by the related model\'s spelling of a column', function () use ($filter, $sql) {
+        expect($sql([['filter_set_operator' => 'and', 'filters' => [$filter('line_items.product.SKU', 'equals', 'SKU-1'), $filter('line_items', 'doesntHave', null)]]], ['lineItems.product']))
+            ->toContain("`products`.`sku` = 'SKU-1'")
+            ->toContain('not exists (select * from `line_items`');
     });
 
     it('keeps other relations denied', function () use ($errors, $filter, $set) {

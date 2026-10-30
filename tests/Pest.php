@@ -36,7 +36,7 @@ function codesMatching(FilterOperationContract $operation, FilterOperator $opera
  */
 function filterApplier(): FilterApplier
 {
-    return new FilterApplier(array_map(app(...), config('api-filters.operations')));
+    return FilterApplier::fromConfig();
 }
 
 /**

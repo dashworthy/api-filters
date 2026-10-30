@@ -39,7 +39,7 @@ class ListOrdersRequest extends FilterableRequest
 }
 ```
 
-- `FilterableRequest` validates the shape of `filter_sets`, `sorts`, `first` and `last`. It has no `authorize()`, so always add one.
+- `FilterableRequest` checks the shape and limits of `filter_sets`, `sorts`, `first` and `last`, each filter's operator and its value against the operation's `rules()`, before the controller runs. It does not know the model: `apiFiltersAndSorts()` checks each field against the query's model. It has no `authorize()`, so always add one.
 - `allowedRelations()` returns relation method names joined by dots. A path also allows each shorter path it starts with. It allows nothing unless overridden.
 
 ### 2. Apply it after your own constraints

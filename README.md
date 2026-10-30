@@ -196,7 +196,8 @@ public function index(ListOrdersRequest $request)
 }
 ```
 
-- `FilterableRequest` validates the shape of all four keys with the same rules and limits the package applies, and requires `first` and `last` together.
+- `FilterableRequest` checks what the operations decide before your controller runs: the shape and limits of all four keys, an operator that some operation handles, and a value that passes that operation's `rules()` once the normalizers have read it. It requires `first` and `last` together.
+- The request does not know your model, so it leaves the fields to `apiFiltersAndSorts()`, which checks each one against the query's model and returns a 422 for a field the model does not expose.
 - `allowedRelations()` allows no relations unless you override it, and it covers both filters and sorts.
 - `apiFiltersAndSorts($request)` applies the filters, then the sorts, then the window when both `first` and `last` were sent.
 - `FilterableRequest` has no `authorize()`, and Laravel lets every request through a form request without one, so add your own.
@@ -212,6 +213,8 @@ An operator is a class that implements `Dashworthy\ApiFilters\Contracts\FilterOp
 | `handle(Builder $query, FilterData $filterData)` | Adds the filter's condition to `$query` |
 
 List the class under `operations` in `config/api-filters.php`. Every class whose `canHandle()` accepts a filter checks the value against its `rules()`, then adds its condition, so two classes that handle the same operator both apply. An operator that no class handles gets a 422. To replace a built-in operator, take its class out of the list and add yours.
+
+`canHandle()` is asked twice: when the request is validated, with the field as the client sent it, and when the filter is applied, with the resolved column. Decide by the `operator`, so both give the same answer.
 
 Operations write their SQL with Laravel's query builder, which writes it for each database: `whereLike()` matches in any letter case and `whereDate()` compares calendar dates wherever they run. Where an operator needs different SQL on your database, replace its class.
 
