@@ -92,7 +92,7 @@ public function index(ListOrdersRequest $request)
 }
 ```
 
-- `FilterableRequest` checks what the operations decide before your controller runs: the shape and limits of both keys, an operator that some operation handles, and a value that passes that operation's `rules()` once the normalizers have read it.
+- `FilterableRequest` checks what the operations decide before your controller runs: the shape and limits of both keys, an operator that some operation handles, and a value that passes that operation's `rules()` once the [`true`, `false` and `null` strings](#operators) have been read.
 - The request does not know your model. `apiFiltersAndSorts()` checks each field against the query's model and returns a 422 for a field the model does not expose. Every field is checked before any is applied, so a rejected request leaves the query as it was.
 - `apiFiltersAndSorts()` applies the filters, then the sorts.
 - Filters never widen the constraints you apply first. Each filter set runs inside its own bracketed group, so an `or` set cannot return another team's rows.
