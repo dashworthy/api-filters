@@ -21,9 +21,6 @@ final class DoesNotContain implements FilterOperationContract
         return $filterData->operator === 'doesNotContain';
     }
 
-    /**
-     * A string or a number.
-     */
     public function rules(): array
     {
         return [Rule::anyOf(['string', 'numeric'])];

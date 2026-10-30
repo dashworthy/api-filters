@@ -20,9 +20,6 @@ final class EndsWith implements FilterOperationContract
         return $filterData->operator === 'endsWith';
     }
 
-    /**
-     * A string or a number.
-     */
     public function rules(): array
     {
         return [Rule::anyOf(['string', 'numeric'])];

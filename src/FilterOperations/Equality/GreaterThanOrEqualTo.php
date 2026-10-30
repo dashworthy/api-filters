@@ -19,9 +19,6 @@ final class GreaterThanOrEqualTo implements FilterOperationContract
         return $filterData->operator === 'gte';
     }
 
-    /**
-     * One value.
-     */
     public function rules(): array
     {
         return [Rule::anyOf(['string', 'numeric', 'boolean'])];

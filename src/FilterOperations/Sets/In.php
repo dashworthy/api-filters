@@ -22,10 +22,6 @@ final class In implements FilterOperationContract
         return $filterData->operator === 'in';
     }
 
-    /**
-     * A list of up to api-filters.limits.in_values values, each one value or
-     * null.
-     */
     public function rules(): array
     {
         return [

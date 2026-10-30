@@ -19,9 +19,6 @@ final class Equals implements FilterOperationContract
         return $filterData->operator === 'equals';
     }
 
-    /**
-     * One value, or null for rows with no value.
-     */
     public function rules(): array
     {
         return ['nullable', Rule::anyOf(['string', 'numeric', 'boolean'])];

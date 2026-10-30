@@ -20,9 +20,6 @@ final class DoesntHave implements FilterOperationContract
         return $filterData->operator === 'doesntHave';
     }
 
-    /**
-     * Any value.
-     */
     public function rules(): array
     {
         return [];

@@ -18,9 +18,6 @@ final class DateBefore implements FilterOperationContract
         return $filterData->operator === 'dateBefore';
     }
 
-    /**
-     * A YYYY-MM-DD calendar date.
-     */
     public function rules(): array
     {
         return ['required', 'date_format:Y-m-d'];

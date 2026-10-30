@@ -19,9 +19,6 @@ final class LessThan implements FilterOperationContract
         return $filterData->operator === 'lt';
     }
 
-    /**
-     * One value.
-     */
     public function rules(): array
     {
         return [Rule::anyOf(['string', 'numeric', 'boolean'])];

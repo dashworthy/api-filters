@@ -121,14 +121,10 @@ final class ApiFilters
     }
 
     /**
-     * The column and relation path a filter's field names, or null when it
-     * names nothing filterable. A plain field is a qualified column of the
-     * query's model. A dotted field is a relation path the model lists and a
-     * column of the model it reaches, which the applier qualifies inside the
-     * relation's subquery. A path through a morph-to reaches no single model,
-     * so no column resolves through it. For doesntHave the whole field is the
-     * path. A client's path is only looked up, never handed to the model: what
-     * comes back is the developer's spelling from #[Filterable].
+     * A path through a morph-to reaches no single model, so no column
+     * resolves through it. A client's path is only looked up, never handed
+     * to the model: what comes back is the developer's spelling from
+     * #[Filterable].
      *
      * @return array{column: string, relation: string|null}|null
      */

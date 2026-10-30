@@ -14,14 +14,9 @@ use Illuminate\Support\Facades\Config;
 use LogicException;
 
 /**
- * Hands each filter to every operation that can handle it, inside a where
- * group of the filter's own joined to the rest of its set by the set's
- * operator, so an operation only writes its own condition and even an OR in it
- * stays within the filter. A filter through a relation is handed the
- * relation's has() query instead, with its column qualified there against the
- * related table, so it matches rows with at least one related row that
- * satisfies it. doesntHave names the relation itself, so it is handed the
- * filter's group.
+ * Each filter gets a where group of its own, so an OR inside an operation
+ * stays within the filter. doesntHave names a relation, so it is not wrapped
+ * in that relation's has() query.
  */
 final class FilterApplier
 {

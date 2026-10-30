@@ -20,9 +20,6 @@ final class NotIn implements FilterOperationContract
         return $filterData->operator === 'notIn';
     }
 
-    /**
-     * The same list as in.
-     */
     public function rules(): array
     {
         return (new In)->rules();

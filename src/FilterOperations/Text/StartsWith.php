@@ -20,9 +20,6 @@ final class StartsWith implements FilterOperationContract
         return $filterData->operator === 'startsWith';
     }
 
-    /**
-     * A string or a number.
-     */
     public function rules(): array
     {
         return [Rule::anyOf(['string', 'numeric'])];

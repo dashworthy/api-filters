@@ -19,9 +19,6 @@ final class GreaterThan implements FilterOperationContract
         return $filterData->operator === 'gt';
     }
 
-    /**
-     * One value.
-     */
     public function rules(): array
     {
         return [Rule::anyOf(['string', 'numeric', 'boolean'])];

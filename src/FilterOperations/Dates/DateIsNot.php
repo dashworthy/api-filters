@@ -18,9 +18,6 @@ final class DateIsNot implements FilterOperationContract
         return $filterData->operator === 'dateIsNot';
     }
 
-    /**
-     * A YYYY-MM-DD calendar date.
-     */
     public function rules(): array
     {
         return ['required', 'date_format:Y-m-d'];
