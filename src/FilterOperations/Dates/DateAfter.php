@@ -6,7 +6,6 @@ namespace Dashworthy\ApiFilters\FilterOperations\Dates;
 
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -16,7 +15,7 @@ final class DateAfter implements FilterOperationContract
 {
     public function canHandle(FilterData $filterData): bool
     {
-        return $filterData->operator === FilterOperator::DateAfter->value;
+        return $filterData->operator === 'dateAfter';
     }
 
     /**

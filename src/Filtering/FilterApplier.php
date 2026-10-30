@@ -6,7 +6,6 @@ namespace Dashworthy\ApiFilters\Filtering;
 
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
@@ -66,7 +65,7 @@ final class FilterApplier
         }
 
         $group->where(function (Builder $filter) use ($operations, $filterData): void {
-            if ($filterData->relation === null || $filterData->operator === FilterOperator::DoesntHave->value) {
+            if ($filterData->relation === null || $filterData->operator === 'doesntHave') {
                 $this->handle($filter, $operations, $filterData);
 
                 return;

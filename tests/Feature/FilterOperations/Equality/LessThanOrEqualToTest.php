@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\FilterOperations\Equality\LessThanOrEqualTo;
 use Workbench\App\Models\Order;
 
@@ -15,5 +14,5 @@ beforeEach(fn () => Order::factory()->createMany([
 ]));
 
 it('includes the boundary', function () {
-    expect(codesMatching(new LessThanOrEqualTo, FilterOperator::Lte, 'total', 100))->toBe(['a50', 'b100']);
+    expect(codesMatching(new LessThanOrEqualTo, 'lte', 'total', 100))->toBe(['a50', 'b100']);
 });

@@ -6,7 +6,6 @@ namespace Dashworthy\ApiFilters\FilterOperations\Text;
 
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\Rule;
 
@@ -18,7 +17,7 @@ final class StartsWith implements FilterOperationContract
 {
     public function canHandle(FilterData $filterData): bool
     {
-        return $filterData->operator === FilterOperator::StartsWith->value;
+        return $filterData->operator === 'startsWith';
     }
 
     /**

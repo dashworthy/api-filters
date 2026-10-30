@@ -6,7 +6,6 @@ namespace Dashworthy\ApiFilters\FilterOperations\Equality;
 
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\Rule;
 
@@ -18,7 +17,7 @@ final class DoesNotEqual implements FilterOperationContract
 {
     public function canHandle(FilterData $filterData): bool
     {
-        return $filterData->operator === FilterOperator::DoesNotEquals->value;
+        return $filterData->operator === 'doesNotEquals';
     }
 
     /**

@@ -6,7 +6,6 @@ namespace Dashworthy\ApiFilters\FilterOperations\Sets;
 
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -18,7 +17,7 @@ final class NotIn implements FilterOperationContract
 {
     public function canHandle(FilterData $filterData): bool
     {
-        return $filterData->operator === FilterOperator::NotIn->value;
+        return $filterData->operator === 'notIn';
     }
 
     /**

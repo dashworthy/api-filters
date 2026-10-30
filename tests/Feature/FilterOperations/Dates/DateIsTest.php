@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\FilterOperations\Dates\DateIs;
 use Workbench\App\Models\Order;
 
@@ -15,5 +14,5 @@ beforeEach(fn () => Order::factory()->createMany([
 ]));
 
 it('matches any time that day', function () {
-    expect(codesMatching(new DateIs, FilterOperator::DateIs, 'placed_at', '2026-01-15'))->toBe(['day15']);
+    expect(codesMatching(new DateIs, 'dateIs', 'placed_at', '2026-01-15'))->toBe(['day15']);
 });

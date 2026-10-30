@@ -5,7 +5,6 @@ declare(strict_types=1);
 use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Dashworthy\ApiFilters\Filtering\FilterApplier;
 use Dashworthy\ApiFilters\FilterOperations\Dates\DateAfter;
@@ -69,28 +68,28 @@ $either = new class implements FilterOperationContract
     }
 };
 
-it('finds the built-in operation for each operator', function (FilterOperator $operator, string $operation) {
-    expect(filterApplier()->operationsFor(new FilterData('orders.notes', $operator->value)))
+it('finds the built-in operation for each operator', function (string $operator, string $operation) {
+    expect(filterApplier()->operationsFor(new FilterData('orders.notes', $operator)))
         ->toHaveCount(1)
         ->sequence(fn ($found) => $found->toBeInstanceOf($operation));
 })->with([
-    'equals' => [FilterOperator::Equals, Equals::class],
-    'doesNotEquals' => [FilterOperator::DoesNotEquals, DoesNotEqual::class],
-    'lt' => [FilterOperator::Lt, LessThan::class],
-    'lte' => [FilterOperator::Lte, LessThanOrEqualTo::class],
-    'gt' => [FilterOperator::Gt, GreaterThan::class],
-    'gte' => [FilterOperator::Gte, GreaterThanOrEqualTo::class],
-    'in' => [FilterOperator::In, In::class],
-    'notIn' => [FilterOperator::NotIn, NotIn::class],
-    'startsWith' => [FilterOperator::StartsWith, StartsWith::class],
-    'contains' => [FilterOperator::Contains, Contains::class],
-    'endsWith' => [FilterOperator::EndsWith, EndsWith::class],
-    'doesNotContain' => [FilterOperator::DoesNotContain, DoesNotContain::class],
-    'dateIs' => [FilterOperator::DateIs, DateIs::class],
-    'dateIsNot' => [FilterOperator::DateIsNot, DateIsNot::class],
-    'dateBefore' => [FilterOperator::DateBefore, DateBefore::class],
-    'dateAfter' => [FilterOperator::DateAfter, DateAfter::class],
-    'doesntHave' => [FilterOperator::DoesntHave, DoesntHave::class],
+    'equals' => ['equals', Equals::class],
+    'doesNotEquals' => ['doesNotEquals', DoesNotEqual::class],
+    'lt' => ['lt', LessThan::class],
+    'lte' => ['lte', LessThanOrEqualTo::class],
+    'gt' => ['gt', GreaterThan::class],
+    'gte' => ['gte', GreaterThanOrEqualTo::class],
+    'in' => ['in', In::class],
+    'notIn' => ['notIn', NotIn::class],
+    'startsWith' => ['startsWith', StartsWith::class],
+    'contains' => ['contains', Contains::class],
+    'endsWith' => ['endsWith', EndsWith::class],
+    'doesNotContain' => ['doesNotContain', DoesNotContain::class],
+    'dateIs' => ['dateIs', DateIs::class],
+    'dateIsNot' => ['dateIsNot', DateIsNot::class],
+    'dateBefore' => ['dateBefore', DateBefore::class],
+    'dateAfter' => ['dateAfter', DateAfter::class],
+    'doesntHave' => ['doesntHave', DoesntHave::class],
 ]);
 
 it('finds no operation for an operator none can handle', function () {

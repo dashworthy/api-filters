@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\FilterOperations\Equality\GreaterThanOrEqualTo;
 use Workbench\App\Models\Order;
 
@@ -15,5 +14,5 @@ beforeEach(fn () => Order::factory()->createMany([
 ]));
 
 it('includes the boundary', function () {
-    expect(codesMatching(new GreaterThanOrEqualTo, FilterOperator::Gte, 'total', 100))->toBe(['b100', 'c500']);
+    expect(codesMatching(new GreaterThanOrEqualTo, 'gte', 'total', 100))->toBe(['b100', 'c500']);
 });

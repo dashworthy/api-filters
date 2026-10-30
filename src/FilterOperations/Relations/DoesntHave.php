@@ -6,7 +6,6 @@ namespace Dashworthy\ApiFilters\FilterOperations\Relations;
 
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Illuminate\Database\Eloquent\Builder;
 use LogicException;
 
@@ -18,7 +17,7 @@ final class DoesntHave implements FilterOperationContract
 {
     public function canHandle(FilterData $filterData): bool
     {
-        return $filterData->operator === FilterOperator::DoesntHave->value;
+        return $filterData->operator === 'doesntHave';
     }
 
     /**

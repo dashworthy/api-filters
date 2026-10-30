@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\FilterOperations\Dates\DateIsNot;
 use Workbench\App\Models\Order;
 
@@ -15,5 +14,5 @@ beforeEach(fn () => Order::factory()->createMany([
 ]));
 
 it('excludes that day', function () {
-    expect(codesMatching(new DateIsNot, FilterOperator::DateIsNot, 'placed_at', '2026-01-15'))->toBe(['day14', 'day16']);
+    expect(codesMatching(new DateIsNot, 'dateIsNot', 'placed_at', '2026-01-15'))->toBe(['day14', 'day16']);
 });

@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\FilterOperations\Equality\Equals;
 use Dashworthy\ApiFilters\FilterOperations\Text\DoesNotContain;
 use Illuminate\Database\Eloquent\Builder;
@@ -14,7 +13,7 @@ mutates(DoesNotContain::class);
 it('includes null rows', function () {
     createOrdersWithNotes();
 
-    expect(codesMatching(new DoesNotContain, FilterOperator::DoesNotContain, 'notes', 'US'))->toBe(['gift', 'none']);
+    expect(codesMatching(new DoesNotContain, 'doesNotContain', 'notes', 'US'))->toBe(['gift', 'none']);
 });
 
 it('keeps its or inside the filter', function () {
@@ -25,8 +24,8 @@ it('keeps its or inside the filter', function () {
     $query = Order::query();
 
     $query->where(function (Builder $group) {
-        (new Equals)->handle($group, new FilterData('orders.status', FilterOperator::Equals->value, 'open'));
-        (new DoesNotContain)->handle($group, new FilterData('orders.notes', FilterOperator::DoesNotContain->value, 'rush'));
+        (new Equals)->handle($group, new FilterData('orders.status', 'equals', 'open'));
+        (new DoesNotContain)->handle($group, new FilterData('orders.notes', 'doesNotContain', 'rush'));
     });
 
     expect($query->pluck('code')->all())->toBe(['open-gift']);

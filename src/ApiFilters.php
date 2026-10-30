@@ -6,7 +6,6 @@ namespace Dashworthy\ApiFilters;
 
 use Dashworthy\ApiFilters\Attributes\Filterable;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Dashworthy\ApiFilters\Enums\SortOperator;
 use Dashworthy\ApiFilters\Filtering\FilterApplier;
@@ -135,7 +134,7 @@ final class ApiFilters
      */
     private function filterTarget(string $field, string $operator): ?array
     {
-        if ($operator === FilterOperator::DoesntHave->value) {
+        if ($operator === 'doesntHave') {
             $relation = $this->relations->find($field);
 
             return $relation === null ? null : ['column' => '', 'relation' => $relation['path']];

@@ -7,7 +7,6 @@ namespace Dashworthy\ApiFilters\FilterOperations\Sets;
 use Closure;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Lang;
@@ -20,7 +19,7 @@ final class In implements FilterOperationContract
 {
     public function canHandle(FilterData $filterData): bool
     {
-        return $filterData->operator === FilterOperator::In->value;
+        return $filterData->operator === 'in';
     }
 
     /**

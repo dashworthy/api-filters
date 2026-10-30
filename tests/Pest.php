@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Filtering\FilterApplier;
 use Dashworthy\ApiFilters\Http\FilterableRequest;
 use Dashworthy\ApiFilters\Tests\TestCase;
@@ -23,10 +22,10 @@ uses(RefreshDatabase::class)->in('Feature');
  *
  * @return list<string>
  */
-function codesMatching(FilterOperationContract $operation, FilterOperator $operator, string $column, mixed $value): array
+function codesMatching(FilterOperationContract $operation, string $operator, string $column, mixed $value): array
 {
     $query = Order::query();
-    $filterData = new FilterData($query->qualifyColumn($column), $operator->value, $value);
+    $filterData = new FilterData($query->qualifyColumn($column), $operator, $value);
 
     $query->where(fn (Builder $group) => $operation->handle($group, $filterData));
 
