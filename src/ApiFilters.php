@@ -6,15 +6,12 @@ namespace Dashworthy\ApiFilters;
 
 use Dashworthy\ApiFilters\Attributes\Filterable;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Data\FilterSetData;
-use Dashworthy\ApiFilters\Data\SortData;
 use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Dashworthy\ApiFilters\Enums\SortOperator;
 use Dashworthy\ApiFilters\Filtering\FilterApplier;
 use Dashworthy\ApiFilters\Http\FilterableRequest;
 use Dashworthy\ApiFilters\Relations\RelationAllowList;
-use Dashworthy\ApiFilters\Sorting\SortApplier;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Lang;
@@ -67,6 +64,8 @@ final class ApiFilters
     /**
      * Apply the request's filter sets, then its sorts. Every field is checked
      * before any is applied, so a rejected request leaves the query as it was.
+     * A related column is sorted through a left join, so rows without a
+     * related row are kept.
      *
      * @return $this
      *
@@ -80,14 +79,18 @@ final class ApiFilters
 
         foreach ($filterSets as $filterSet) {
             $this->query->where(function (Builder $group) use ($applier, $filterSet): void {
-                foreach ($filterSet->filters as $filter) {
-                    $applier->apply($group, $filter, $filterSet->operator);
+                foreach ($filterSet['filters'] as $filter) {
+                    $applier->apply($group, $filter, $filterSet['operator']);
                 }
             });
         }
 
-        foreach ($sorts as $sortData) {
-            (new SortApplier)->apply($this->query, $sortData);
+        foreach ($sorts as $sort) {
+            if ($sort['relation'] === null) {
+                $this->query->orderBy($sort['column'], $sort['direction']);
+            } else {
+                $this->query->orderByLeftPowerJoins("{$sort['relation']}.{$sort['column']}", $sort['direction']);
+            }
         }
 
         return $this;
@@ -105,7 +108,7 @@ final class ApiFilters
      * The filter sets with each field resolved against the query's model.
      *
      * @param  list<array{filter_set_operator: string, filters: list<array{field: string, filter_operator: string, value: mixed}>}>  $filterSets
-     * @return list<FilterSetData>
+     * @return list<array{operator: FilterSetOperator, filters: list<FilterData>}>
      *
      * @throws ValidationException when a field names nothing filterable
      */
@@ -129,7 +132,7 @@ final class ApiFilters
                 $filters[] = new FilterData($target['column'], $filter['filter_operator'], $filter['value'], $target['relation']);
             }
 
-            $resolved[] = new FilterSetData(FilterSetOperator::from($set['filter_set_operator']), $filters);
+            $resolved[] = ['operator' => FilterSetOperator::from($set['filter_set_operator']), 'filters' => $filters];
         }
 
         if ($errors !== []) {
@@ -172,10 +175,11 @@ final class ApiFilters
     }
 
     /**
-     * The sorts with each field resolved against the query's model.
+     * The sorts with each field resolved against the query's model. A none
+     * sort's field is checked too, and the sort is then left out.
      *
      * @param  list<array{field: string, sort_operator: string}>  $sorts
-     * @return list<SortData>
+     * @return list<array{column: string, direction: 'asc'|'desc', relation: string|null}>
      *
      * @throws ValidationException when a field names nothing sortable
      */
@@ -193,7 +197,11 @@ final class ApiFilters
                 continue;
             }
 
-            $resolved[] = new SortData($target['column'], SortOperator::from($sort['sort_operator']), $target['relation']);
+            $direction = SortOperator::from($sort['sort_operator']);
+
+            if ($direction !== SortOperator::None) {
+                $resolved[] = ['column' => $target['column'], 'direction' => $direction->value, 'relation' => $target['relation']];
+            }
         }
 
         if ($errors !== []) {

@@ -41,7 +41,6 @@ arch('every class keeps to the approved directories')
         'FilterOperations' => FilterOperationContract::class,
         'Filtering',
         'Relations',
-        'Sorting',
         'Http' => FormRequest::class,
     ], beneath: 'Dashworthy\ApiFilters')
     ->ignoring([ApiFiltersServiceProvider::class, ApiFilters::class]);
@@ -72,7 +71,6 @@ arch('every class is named for its directory')
         'Data' => 'Data',
         'Filtering' => 'Applier',
         'Relations' => 'AllowList',
-        'Sorting' => 'Applier',
         'Http' => 'Request',
     ], beneath: 'Dashworthy\ApiFilters');
 

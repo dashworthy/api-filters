@@ -6,6 +6,7 @@ use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\Http\FilterableRequest;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
+use Workbench\App\Models\Country;
 use Workbench\App\Models\Customer;
 use Workbench\App\Models\Order;
 use Workbench\App\Models\User;
@@ -14,7 +15,8 @@ mutates(FilterableRequest::class, ApiFilters::class);
 
 /*
  | $errors sorts a query on the model, an order unless named, and returns the
- | validation errors, keyed by input path. $sort builds the wire format.
+ | validation errors, keyed by input path. $codes sorts an orders query and
+ | returns the orders' codes in that order. $sort builds the wire format.
  */
 $errors = function (mixed $sorts, ?Model $model = null): array {
     try {
@@ -26,6 +28,12 @@ $errors = function (mixed $sorts, ?Model $model = null): array {
     return [];
 };
 
+$codes = fn (array $sorts): array => ApiFilters::for(Order::query())
+    ->apply(filterableRequest(['sorts' => $sorts]))
+    ->query()
+    ->pluck('code')
+    ->all();
+
 $sort = fn (string $field, string $operator = 'asc'): array => ['field' => $field, 'sort_operator' => $operator];
 
 it('sorts by the qualified column and the developer\'s path, spelled as the models list them', function () use ($sort) {
@@ -33,8 +41,49 @@ it('sorts by the qualified column and the developer\'s path, spelled as the mode
         ->toContain('order by `orders`.`total` desc, `customers`.`name` asc');
 });
 
-it('accepts a nested to one path', function () use ($errors, $sort) {
-    expect($errors([$sort('customer.country.name')]))->toBe([]);
+describe('sorts order the query', function () use ($codes, $sort) {
+    it('orders by each sort in turn', function () use ($codes, $sort) {
+        Order::factory()->createMany([['code' => 'one', 'total' => 500], ['code' => 'two', 'total' => 50], ['code' => 'three', 'total' => 500]]);
+
+        expect($codes([$sort('total', 'desc'), $sort('code')]))->toBe(['one', 'three', 'two']);
+    });
+
+    it('skips a none sort', function () use ($codes, $sort) {
+        Order::factory()->createMany([['code' => 'one', 'total' => 500], ['code' => 'two', 'total' => 50], ['code' => 'three', 'total' => 100]]);
+
+        expect($codes([$sort('status', 'none'), $sort('total')]))->toBe(['two', 'three', 'one']);
+    });
+
+    it('sorts by a belongs to column', function () use ($codes, $sort) {
+        Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
+        Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
+
+        expect($codes([$sort('customer.name')]))->toBe(['ada', 'grace']);
+    });
+
+    it('sorts through a nested to one path', function () use ($codes, $sort) {
+        Order::factory()->for(Customer::factory()->for(Country::factory()->state(['name' => 'Zambia'])))->create(['code' => 'zambia']);
+        Order::factory()->for(Customer::factory()->for(Country::factory()->state(['name' => 'Austria'])))->create(['code' => 'austria']);
+
+        expect($codes([$sort('customer.country.name')]))->toBe(['austria', 'zambia']);
+    });
+
+    it('keeps rows without a related row', function () use ($codes, $sort) {
+        Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
+        Order::factory()->create(['code' => 'nobody']);
+        Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
+
+        expect($codes([$sort('customer.name')]))->toBe(['nobody', 'ada', 'grace']);
+    });
+
+    it('keeps each row\'s own columns when sorting through a relation', function () use ($sort) {
+        Customer::factory()->count(3)->create();
+        Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
+        Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
+
+        expect(ApiFilters::for(Order::query())->apply(filterableRequest(['sorts' => [$sort('customer.name')]]))->query()->get()->pluck('code', 'id')->all())
+            ->toEqual(Order::query()->pluck('code', 'id')->all());
+    });
 });
 
 describe('only visible columns can be sorted', function () use ($errors, $sort) {
