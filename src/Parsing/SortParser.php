@@ -104,7 +104,7 @@ final class SortParser
 
         $relation = $this->relations->find(Str::beforeLast($field, '.'));
 
-        if ($relation === null || ! $relation['toOne']) {
+        if ($relation === null || ! $relation['toOne'] || $relation['model'] === null) {
             return null;
         }
 

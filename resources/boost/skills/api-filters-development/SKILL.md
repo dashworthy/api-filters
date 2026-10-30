@@ -69,7 +69,8 @@ A custom operator is a class implementing `Dashworthy\ApiFilters\Contracts\Filte
 ## Rules
 
 - Never pass a client-supplied string to Eloquent as a relation name (`whereHas`, `has`, `with`, `orderByPowerJoins`). Client relation paths must go through `allowedRelations()`.
-- Choose the columns clients may filter and sort by. List them with `#[Filterable([...])]` (`Dashworthy\ApiFilters\Attributes\Filterable`) on the model, including `id` or `created_at` when clients use them. Without the attribute, every column not hidden by `$hidden` or `$visible` is filterable and sortable. A hidden column stays out of reach either way.
+- List the columns clients may filter and sort by with `#[Filterable([...])]` (`Dashworthy\ApiFilters\Attributes\Filterable`) on the query's model and on every model an allowed relation reaches, including `id` or `created_at` when clients use them. A model without the attribute exposes no columns. A listed column the model hides with `$hidden` or `$visible` stays out of reach.
+- No column can be filtered or sorted through a morph-to relation, because the model it reaches differs from row to row. `doesntHave` still works on one.
 - Qualify your own `where` columns (`orders.team_id`) on queries that sort through relations, because relation sorts join the related table.
 - In a custom operation, bind every value and wrap the column with the grammar. Never write client input into SQL. Cap value sizes in `rules()`.
 - Sorts only reach to-one relations. Do not allow-list a path for sorting through a has-many.

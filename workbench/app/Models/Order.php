@@ -2,6 +2,7 @@
 
 namespace Workbench\App\Models;
 
+use Dashworthy\ApiFilters\Attributes\Filterable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Workbench\Database\Factories\OrderFactory;
 
+#[Filterable(['status', 'total', 'notes', 'code', 'is_priority', 'placed_at', 'location'])]
 #[Hidden(['internal_reference'])]
 #[Unguarded]
 #[UseFactory(OrderFactory::class)]

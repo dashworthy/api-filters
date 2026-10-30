@@ -6,7 +6,7 @@ use Dashworthy\ApiFilters\Attributes\Filterable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * An order that lists the columns api-filters exposes, one of them the
+ * An order whose own list replaces Order's, one of its columns the
  * internal_reference column that Order hides.
  */
 #[Filterable(['status', 'total', 'internal_reference'])]

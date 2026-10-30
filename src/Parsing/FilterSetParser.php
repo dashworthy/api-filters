@@ -149,9 +149,10 @@ final class FilterSetParser
      * nothing filterable. A plain field is a qualified column of the query's
      * model. A dotted field is an allow-listed relation path and a column of
      * the model it reaches, which the applier qualifies inside the relation's
-     * subquery. For doesntHave the whole field is the path. A client's path is
-     * only looked up, never handed to the model: what comes back is the
-     * developer's spelling from the allow-list.
+     * subquery. A path through a morph-to reaches no single model, so no
+     * column resolves through it. For doesntHave the whole field is the path.
+     * A client's path is only looked up, never handed to the model: what comes
+     * back is the developer's spelling from the allow-list.
      *
      * @return array{column: string, relation: string|null}|null
      */
@@ -170,7 +171,7 @@ final class FilterSetParser
         }
 
         $relation = $this->relations->find(Str::beforeLast($field, '.'));
-        $column = $relation === null ? null : $this->columns->column($relation['model'], Str::afterLast($field, '.'));
+        $column = $relation === null || $relation['model'] === null ? null : $this->columns->column($relation['model'], Str::afterLast($field, '.'));
 
         return $relation === null || $column === null ? null : ['column' => $column, 'relation' => $relation['path']];
     }

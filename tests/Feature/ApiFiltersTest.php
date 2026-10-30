@@ -9,6 +9,7 @@ use Dashworthy\ApiFilters\FilterOperations\Equality\Equals;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Workbench\App\Models\Comment;
 use Workbench\App\Models\Customer;
 use Workbench\App\Models\ListedOrder;
 use Workbench\App\Models\Order;
@@ -298,6 +299,18 @@ describe('models that list their columns with #[Filterable]', function () use ($
         expect($codes($filter('customer.name', 'equals', 'Ada')))->toBe(['ada'])
             ->and(fn () => $codes($filter('customer.email', 'equals', 'ada@example.com')))
             ->toThrow(ValidationException::class, 'This field cannot be filtered.');
+    });
+});
+
+describe('a morph-to reaches a different model from row to row', function () use ($filter, $set) {
+    it('refuses to filter by a column through it', function () use ($filter, $set) {
+        expect(fn () => ApiFilters::for(Comment::query())->allowedRelations(['commentable'])->filter([$set('and', $filter('commentable.created_at', 'equals', '2026-01-01'))]))
+            ->toThrow(ValidationException::class, 'This field cannot be filtered.');
+    });
+
+    it('refuses to sort by a column through it', function () {
+        expect(fn () => ApiFilters::for(Comment::query())->allowedRelations(['commentable'])->sort([['field' => 'commentable.created_at', 'sort_operator' => 'asc']]))
+            ->toThrow(ValidationException::class, 'This field cannot be sorted.');
     });
 });
 

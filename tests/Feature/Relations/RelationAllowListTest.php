@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\Relations\RelationAllowList;
+use Workbench\App\Models\Comment;
 use Workbench\App\Models\LineItem;
 use Workbench\App\Models\Order;
 use Workbench\App\Models\Product;
@@ -83,6 +84,11 @@ describe('matching', function () use ($codes) {
             ->and($relations->find('customer.country')['toOne'] ?? null)->toBeTrue()
             ->and($relations->find('lineItems')['toOne'] ?? null)->toBeFalse()
             ->and($relations->find('lineItems.product')['toOne'] ?? null)->toBeFalse();
+    });
+
+    it('reaches no single model through a morph-to', function () {
+        expect((new RelationAllowList(new Comment, ['commentable']))->find('commentable'))
+            ->toBe(['path' => 'commentable', 'model' => null, 'toOne' => false]);
     });
 
     it('finds nothing for a path that is not listed', function () {

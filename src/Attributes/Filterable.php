@@ -7,10 +7,10 @@ namespace Dashworthy\ApiFilters\Attributes;
 use Attribute;
 
 /**
- * Lists the columns of a model that clients may filter and sort by, in place
- * of every column the model does not hide. A listed column the model hides
- * stays out of reach. The model, one of its traits or a parent class may
- * carry it, as with Laravel's #[Hidden].
+ * Lists the columns of a model that clients may filter and sort by. A model
+ * without it exposes no columns, and a listed column the model hides stays
+ * out of reach. The model, one of its traits or a parent class may carry it,
+ * as with Laravel's #[Hidden].
  */
 #[Attribute(Attribute::TARGET_CLASS)]
 final readonly class Filterable

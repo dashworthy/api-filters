@@ -27,7 +27,7 @@ final class RelationAllowList
     /**
      * Every allowed path and each of its prefixes, keyed by camel-cased segments.
      *
-     * @var array<string, array{path: string, model: Model, toOne: bool}>
+     * @var array<string, array{path: string, model: Model|null, toOne: bool}>
      */
     private array $paths = [];
 
@@ -46,9 +46,10 @@ final class RelationAllowList
     /**
      * The developer's spelling of a client's path, the model it reaches, and
      * whether every segment reaches at most one row, or null when the path is
-     * not allowed.
+     * not allowed. The model is null once a morph-to segment makes it differ
+     * from row to row, so no column can be checked against its list.
      *
-     * @return array{path: string, model: Model, toOne: bool}|null
+     * @return array{path: string, model: Model|null, toOne: bool}|null
      */
     public function find(string $clientPath): ?array
     {
@@ -59,14 +60,16 @@ final class RelationAllowList
     {
         $spelling = [];
         $toOne = true;
+        $isMorphed = false;
 
         foreach (explode('.', $path) as $segment) {
             $relation = $this->relation($model, $segment, $path);
             $model = $relation->getRelated();
             $spelling[] = $segment;
             $toOne = $toOne && $this->isToOne($relation);
+            $isMorphed = $isMorphed || $relation instanceof MorphTo;
 
-            $this->paths[$this->key(implode('.', $spelling))] = ['path' => implode('.', $spelling), 'model' => $model, 'toOne' => $toOne];
+            $this->paths[$this->key(implode('.', $spelling))] = ['path' => implode('.', $spelling), 'model' => $isMorphed ? null : $model, 'toOne' => $toOne];
         }
     }
 

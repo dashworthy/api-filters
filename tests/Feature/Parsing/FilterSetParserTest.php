@@ -38,7 +38,7 @@ $filter = fn (string $field, string $operator, mixed $value): array => [
 
 $set = fn (array ...$filters): array => ['filter_set_operator' => 'and', 'filters' => $filters];
 
-it('returns typed filter sets with the qualified schema columns', function () use ($filter) {
+it('returns typed filter sets with the qualified columns', function () use ($filter) {
     $filterSets = (new FilterSetParser(new ColumnResolver, new RelationAllowList(new Order, []), filterApplier()))->parse([
         ['filter_set_operator' => 'or', 'filters' => [$filter('STATUS', 'equals', 'open'), $filter('notes', 'in', ['null', 'rush'])]],
     ], new Order);

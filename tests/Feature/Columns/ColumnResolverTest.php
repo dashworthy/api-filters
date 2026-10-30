@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\Columns\ColumnResolver;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Workbench\App\Models\Concerns\ExposesStatus;
@@ -56,6 +57,29 @@ it('matches a visible column in any case', function () {
     expect((new ColumnResolver)->resolve(new Order, 'STATUS'))->toBe('orders.status');
 });
 
+it('exposes nothing on a model without #[Filterable]', function () {
+    $model = new class extends Model
+    {
+        protected $table = 'orders';
+    };
+
+    expect((new ColumnResolver)->resolve($model, 'status'))->toBeNull();
+});
+
+it('never reads the table', function () {
+    $unlisted = new class extends Model
+    {
+        protected $table = 'orders';
+    };
+
+    DB::enableQueryLog();
+
+    (new ColumnResolver)->resolve(new Order, 'status');
+    (new ColumnResolver)->resolve($unlisted, 'status');
+
+    expect(DB::getQueryLog())->toBe([]);
+});
+
 describe('models that list their columns with #[Filterable]', function () {
     it('resolves only the listed columns', function () {
         expect((new ColumnResolver)->resolve(new ListedOrder, 'status'))->toBe('orders.status')
@@ -68,14 +92,6 @@ describe('models that list their columns with #[Filterable]', function () {
 
     it('keeps a listed column the model hides unexposed', function () {
         expect((new ColumnResolver)->resolve(new ListedOrder, 'internal_reference'))->toBeNull();
-    });
-
-    it('does not read the table', function () {
-        DB::enableQueryLog();
-
-        (new ColumnResolver)->resolve(new ListedOrder, 'status');
-
-        expect(DB::getQueryLog())->toBe([]);
     });
 
     it('keeps each model to its own columns when two share a table', function () {
