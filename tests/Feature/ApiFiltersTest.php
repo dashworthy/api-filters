@@ -20,9 +20,8 @@ mutates(ApiFilters::class);
  | $codes filters an orders query and returns the matching orders' codes.
  | $set and $filter build the wire format.
  */
-$codes = fn (array $filterSets, ?Builder $query = null): array => ApiFilters::for($query ?? Order::query())
+$codes = fn (array $filterSets, ?Builder $query = null): array => (new ApiFilters($query ?? Order::query()))
     ->apply(filterableRequest(['filter_sets' => $filterSets]))
-    ->query()
     ->orderBy('code')
     ->pluck('code')
     ->all();
@@ -82,7 +81,7 @@ describe('malformed input is rejected before any query runs', function () use ($
         $before = $query->toRawSql();
 
         try {
-            ApiFilters::for($query)->apply(filterableRequest(['filter_sets' => [$set('and', $filter('status', 'equals', 'open'), $filter('nope', 'equals', 'x'))]]));
+            (new ApiFilters($query))->apply(filterableRequest(['filter_sets' => [$set('and', $filter('status', 'equals', 'open'), $filter('nope', 'equals', 'x'))]]));
         } catch (ValidationException) {
         }
 
@@ -94,7 +93,7 @@ describe('relation paths are denied by default', function () use ($filter, $set)
     it('cannot truncate through a relation name', function () use ($filter, $set) {
         Order::factory()->count(2)->create();
 
-        expect(fn () => ApiFilters::for(Order::query())->apply(filterableRequest(['filter_sets' => [$set('and', $filter('truncate.id', 'equals', 1))]]))->query()->get())
+        expect(fn () => (new ApiFilters(Order::query()))->apply(filterableRequest(['filter_sets' => [$set('and', $filter('truncate.id', 'equals', 1))]]))->get())
             ->toThrow(ValidationException::class)
             ->and(Order::query()->count())->toBe(2);
     });
@@ -104,7 +103,7 @@ describe('relation names from clients are never called', function () use ($filte
     it('cannot truncate through an unlisted name', function () use ($filter, $set) {
         Order::factory()->count(2)->create();
 
-        expect(fn () => ApiFilters::for(Order::query())->apply(filterableRequest(['filter_sets' => [$set('and', $filter('truncate.id', 'equals', 1))]]))->query()->get())
+        expect(fn () => (new ApiFilters(Order::query()))->apply(filterableRequest(['filter_sets' => [$set('and', $filter('truncate.id', 'equals', 1))]]))->get())
             ->toThrow(ValidationException::class)
             ->and(Order::query()->count())->toBe(2);
     });
@@ -112,7 +111,7 @@ describe('relation names from clients are never called', function () use ($filte
     it('cannot save through an unlisted name', function () use ($filter, $set) {
         Order::factory()->count(2)->create();
 
-        expect(fn () => ApiFilters::for(Order::query())->apply(filterableRequest(['filter_sets' => [$set('and', $filter('save.id', 'equals', 1))]]))->query()->get())
+        expect(fn () => (new ApiFilters(Order::query()))->apply(filterableRequest(['filter_sets' => [$set('and', $filter('save.id', 'equals', 1))]]))->get())
             ->toThrow(ValidationException::class)
             ->and(Order::query()->count())->toBe(2);
     });
@@ -203,7 +202,7 @@ describe('apps add their own operations', function () use ($codes, $filter, $set
     it('checks the value against the operation\'s rules', function () use ($filter, $set, $withinPolygon) {
         config()->push('api-filters.operations', $withinPolygon);
 
-        ApiFilters::for(Order::query())->apply(filterableRequest(['filter_sets' => [$set('and', $filter('location', 'withinPolygon', [[0, 0], [2, 0], [2, 2], [0, 2]]))]]));
+        (new ApiFilters(Order::query()))->apply(filterableRequest(['filter_sets' => [$set('and', $filter('location', 'withinPolygon', [[0, 0], [2, 0], [2, 2], [0, 2]]))]]));
     })->throws(ValidationException::class, 'The value must be a closed ring of [longitude, latitude] positions.');
 
     it('keeps the operation inside the developer\'s constraints', function () use ($codes, $filter, $set, $square, $withinPolygon) {
@@ -265,7 +264,7 @@ describe('apps add their own operations', function () use ($codes, $filter, $set
     it('refuses an entry that is not an operation', function () use ($filter, $set) {
         config()->push('api-filters.operations', stdClass::class);
 
-        ApiFilters::for(Order::query())->apply(filterableRequest(['filter_sets' => [$set('and', $filter('status', 'equals', 'open'))]]));
+        (new ApiFilters(Order::query()))->apply(filterableRequest(['filter_sets' => [$set('and', $filter('status', 'equals', 'open'))]]));
     })->throws(LogicException::class, 'Every entry in api-filters.operations must implement Dashworthy\ApiFilters\Contracts\FilterOperationContract.');
 });
 
@@ -273,18 +272,17 @@ describe('models that list their columns with #[Filterable]', function () use ($
     it('sorts only by the columns the model lists', function () {
         Order::factory()->createMany([['code' => 'small', 'total' => 50], ['code' => 'large', 'total' => 500]]);
 
-        expect(ApiFilters::for(ListedOrder::query())->apply(filterableRequest(['sorts' => [['field' => 'total', 'sort_operator' => 'desc']]]))->query()->pluck('code')->all())
+        expect((new ApiFilters(ListedOrder::query()))->apply(filterableRequest(['sorts' => [['field' => 'total', 'sort_operator' => 'desc']]]))->pluck('code')->all())
             ->toBe(['large', 'small'])
-            ->and(fn () => ApiFilters::for(ListedOrder::query())->apply(filterableRequest(['sorts' => [['field' => 'notes', 'sort_operator' => 'asc']]])))
+            ->and(fn () => (new ApiFilters(ListedOrder::query()))->apply(filterableRequest(['sorts' => [['field' => 'notes', 'sort_operator' => 'asc']]])))
             ->toThrow(ValidationException::class, 'This field cannot be sorted.');
     });
 
     it('filters through a relation only by the columns the related model lists', function () use ($filter, $set) {
         Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
         Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
-        $codes = fn (array $filter): array => ApiFilters::for(ListedOrder::query())
+        $codes = fn (array $filter): array => (new ApiFilters(ListedOrder::query()))
             ->apply(filterableRequest(['filter_sets' => [$set('and', $filter)]]))
-            ->query()
             ->pluck('code')
             ->all();
 
@@ -296,12 +294,12 @@ describe('models that list their columns with #[Filterable]', function () use ($
 
 describe('a morph-to reaches a different model from row to row', function () use ($filter, $set) {
     it('refuses to filter by a column through it', function () use ($filter, $set) {
-        expect(fn () => ApiFilters::for(Comment::query())->apply(filterableRequest(['filter_sets' => [$set('and', $filter('commentable.created_at', 'equals', '2026-01-01'))]])))
+        expect(fn () => (new ApiFilters(Comment::query()))->apply(filterableRequest(['filter_sets' => [$set('and', $filter('commentable.created_at', 'equals', '2026-01-01'))]])))
             ->toThrow(ValidationException::class, 'This field cannot be filtered.');
     });
 
     it('refuses to sort by a column through it', function () {
-        expect(fn () => ApiFilters::for(Comment::query())->apply(filterableRequest(['sorts' => [['field' => 'commentable.created_at', 'sort_operator' => 'asc']]])))
+        expect(fn () => (new ApiFilters(Comment::query()))->apply(filterableRequest(['sorts' => [['field' => 'commentable.created_at', 'sort_operator' => 'asc']]])))
             ->toThrow(ValidationException::class, 'This field cannot be sorted.');
     });
 });
@@ -310,7 +308,7 @@ describe('sorts', function () {
     it('cannot truncate through a sort field', function () {
         Order::factory()->count(2)->create();
 
-        expect(fn () => ApiFilters::for(Order::query())->apply(filterableRequest(['sorts' => [['field' => 'truncate.id', 'sort_operator' => 'asc']]]))->query()->get())
+        expect(fn () => (new ApiFilters(Order::query()))->apply(filterableRequest(['sorts' => [['field' => 'truncate.id', 'sort_operator' => 'asc']]]))->get())
             ->toThrow(ValidationException::class)
             ->and(Order::query()->count())->toBe(2);
     });
@@ -320,7 +318,7 @@ describe('sorts', function () {
         $before = $query->toRawSql();
 
         try {
-            ApiFilters::for($query)->apply(filterableRequest(['sorts' => [['field' => 'total', 'sort_operator' => 'desc'], ['field' => 'nope', 'sort_operator' => 'asc']]]));
+            (new ApiFilters($query))->apply(filterableRequest(['sorts' => [['field' => 'total', 'sort_operator' => 'desc'], ['field' => 'nope', 'sort_operator' => 'asc']]]));
         } catch (ValidationException) {
         }
 

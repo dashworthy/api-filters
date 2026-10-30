@@ -37,9 +37,8 @@ mutates(FilterApplier::class);
  | $codes filters an orders query through the engine and returns the matching
  | orders' codes. $filter builds the wire format.
  */
-$codes = fn (string $setOperator, array $filters, ?Builder $query = null): array => ApiFilters::for($query ?? Order::query())
+$codes = fn (string $setOperator, array $filters, ?Builder $query = null): array => (new ApiFilters($query ?? Order::query()))
     ->apply(filterableRequest(['filter_sets' => [['filter_set_operator' => $setOperator, 'filters' => $filters]]]))
-    ->query()
     ->orderBy('code')
     ->pluck('code')
     ->all();

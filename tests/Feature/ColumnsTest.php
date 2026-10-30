@@ -20,7 +20,7 @@ mutates(ApiFilters::class);
  */
 $resolve = function (Model $model, string $field): ?string {
     try {
-        $query = ApiFilters::for($model->newQuery())->apply(filterableRequest(['sorts' => [['field' => $field, 'sort_operator' => 'asc']]]))->query();
+        $query = (new ApiFilters($model->newQuery()))->apply(filterableRequest(['sorts' => [['field' => $field, 'sort_operator' => 'asc']]]));
     } catch (ValidationException) {
         return null;
     }
@@ -44,7 +44,7 @@ it('rejects a column outside visible', function () use ($resolve) {
 it('uses one message for unknown and hidden columns', function () {
     $message = function (string $field): array {
         try {
-            ApiFilters::for(User::query())->apply(filterableRequest(['filter_sets' => [
+            (new ApiFilters(User::query()))->apply(filterableRequest(['filter_sets' => [
                 ['filter_set_operator' => 'and', 'filters' => [['field' => $field, 'filter_operator' => 'equals', 'value' => 'x']]],
             ]]));
         } catch (ValidationException $exception) {

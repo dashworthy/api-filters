@@ -33,7 +33,7 @@ class ApiFiltersServiceProvider extends ServiceProvider
 
         Builder::macro('apiFiltersAndSorts', function (FilterableRequest $request): Builder {
             /** @var Builder<Model> $this */
-            return ApiFilters::for($this)->apply($request)->query();
+            return (new ApiFilters($this))->apply($request);
         });
 
         if (! $this->app->runningInConsole()) {

@@ -35,30 +35,17 @@ final class ApiFilters
     private readonly RelationAllowList $relations;
 
     /**
+     * The engine changes the builder it is given.
+     *
      * @param  Builder<TModel>  $query
      *
      * @throws LogicException when a listed relation path names no relation method
      */
-    private function __construct(private readonly Builder $query)
+    public function __construct(private readonly Builder $query)
     {
         $model = $query->getModel();
 
         $this->relations = new RelationAllowList($model, self::filterable($model)->relations ?? []);
-    }
-
-    /**
-     * Wrap a query. The engine changes the builder it is given.
-     *
-     * @template TQueryModel of Model
-     *
-     * @param  Builder<TQueryModel>  $query
-     * @return self<TQueryModel>
-     *
-     * @throws LogicException when a listed relation path names no relation method
-     */
-    public static function for(Builder $query): self
-    {
-        return new self($query);
     }
 
     /**
@@ -67,11 +54,11 @@ final class ApiFilters
      * A related column is sorted through a left join, so rows without a
      * related row are kept.
      *
-     * @return $this
+     * @return Builder<TModel>
      *
      * @throws ValidationException when a field names nothing the model exposes
      */
-    public function apply(FilterableRequest $request): self
+    public function apply(FilterableRequest $request): Builder
     {
         $filterSets = $this->resolveFilterSets($request->filterSets());
         $sorts = $this->resolveSorts($request->sorts());
@@ -93,14 +80,6 @@ final class ApiFilters
             }
         }
 
-        return $this;
-    }
-
-    /**
-     * @return Builder<TModel>
-     */
-    public function query(): Builder
-    {
         return $this->query;
     }
 

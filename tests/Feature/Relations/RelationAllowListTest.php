@@ -16,9 +16,8 @@ mutates(RelationAllowList::class);
  | $codes filters an orders query by line item quantity through a client's
  | path, with the paths Order lists, and returns the matching orders' codes.
  */
-$codes = fn (string $field): array => ApiFilters::for(Order::query())
+$codes = fn (string $field): array => (new ApiFilters(Order::query()))
     ->apply(filterableRequest(['filter_sets' => [['filter_set_operator' => 'and', 'filters' => [['field' => $field, 'filter_operator' => 'gt', 'value' => 2]]]]]))
-    ->query()
     ->orderBy('code')
     ->pluck('code')
     ->all();
@@ -36,7 +35,7 @@ describe('declaration', function () {
         };
 
         try {
-            ApiFilters::for($model->newQuery());
+            new ApiFilters($model->newQuery());
         } catch (LogicException) {
         }
 
@@ -50,7 +49,7 @@ describe('declaration', function () {
             protected $table = 'orders';
         };
 
-        expect(fn () => ApiFilters::for($model->newQuery()))
+        expect(fn () => new ApiFilters($model->newQuery()))
             ->toThrow(LogicException::class, 'api-filters cannot allow the relation path [save]: [save] is not a public method')
             ->and(Order::query()->count())->toBe(2);
     });

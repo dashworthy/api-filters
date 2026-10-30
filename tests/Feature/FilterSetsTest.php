@@ -22,7 +22,7 @@ mutates(FilterableRequest::class, ApiFilters::class);
  */
 $errors = function (mixed $filterSets, ?Model $model = null): array {
     try {
-        ApiFilters::for(($model ?? new Order)->newQuery())->apply(filterableRequest(['filter_sets' => $filterSets]));
+        (new ApiFilters(($model ?? new Order)->newQuery()))->apply(filterableRequest(['filter_sets' => $filterSets]));
     } catch (ValidationException $exception) {
         return $exception->errors();
     }
@@ -30,9 +30,8 @@ $errors = function (mixed $filterSets, ?Model $model = null): array {
     return [];
 };
 
-$sql = fn (array $filterSets): string => ApiFilters::for(Order::query())
+$sql = fn (array $filterSets): string => (new ApiFilters(Order::query()))
     ->apply(filterableRequest(['filter_sets' => $filterSets]))
-    ->query()
     ->toRawSql();
 
 $filter = fn (string $field, string $operator, mixed $value): array => [

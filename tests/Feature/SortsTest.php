@@ -20,7 +20,7 @@ mutates(FilterableRequest::class, ApiFilters::class);
  */
 $errors = function (mixed $sorts, ?Model $model = null): array {
     try {
-        ApiFilters::for(($model ?? new Order)->newQuery())->apply(filterableRequest(['sorts' => $sorts]));
+        (new ApiFilters(($model ?? new Order)->newQuery()))->apply(filterableRequest(['sorts' => $sorts]));
     } catch (ValidationException $exception) {
         return $exception->errors();
     }
@@ -28,16 +28,15 @@ $errors = function (mixed $sorts, ?Model $model = null): array {
     return [];
 };
 
-$codes = fn (array $sorts): array => ApiFilters::for(Order::query())
+$codes = fn (array $sorts): array => (new ApiFilters(Order::query()))
     ->apply(filterableRequest(['sorts' => $sorts]))
-    ->query()
     ->pluck('code')
     ->all();
 
 $sort = fn (string $field, string $operator = 'asc'): array => ['field' => $field, 'sort_operator' => $operator];
 
 it('sorts by the qualified column and the developer\'s path, spelled as the models list them', function () use ($sort) {
-    expect(ApiFilters::for(Order::query())->apply(filterableRequest(['sorts' => [$sort('TOTAL', 'desc'), $sort('customer.NAME')]]))->query()->toRawSql())
+    expect((new ApiFilters(Order::query()))->apply(filterableRequest(['sorts' => [$sort('TOTAL', 'desc'), $sort('customer.NAME')]]))->toRawSql())
         ->toContain('order by `orders`.`total` desc, `customers`.`name` asc');
 });
 
@@ -81,7 +80,7 @@ describe('sorts order the query', function () use ($codes, $sort) {
         Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
         Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
 
-        expect(ApiFilters::for(Order::query())->apply(filterableRequest(['sorts' => [$sort('customer.name')]]))->query()->get()->pluck('code', 'id')->all())
+        expect((new ApiFilters(Order::query()))->apply(filterableRequest(['sorts' => [$sort('customer.name')]]))->get()->pluck('code', 'id')->all())
             ->toEqual(Order::query()->pluck('code', 'id')->all());
     });
 });
