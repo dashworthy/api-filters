@@ -35,6 +35,7 @@ arch('the package source declares strict types')
 arch('every class keeps to the approved directories')
     ->expect('Dashworthy\ApiFilters')
     ->toUseApprovedDirectories([
+        'Attributes' => fn (string $class): bool => (new ReflectionClass($class))->getAttributes(Attribute::class) !== [],
         'Columns',
         'Contracts' => fn (string $class): bool => interface_exists($class),
         'Data' => fn (string $class): bool => (new ReflectionClass($class))->isReadOnly(),
@@ -86,8 +87,9 @@ arch('every class is named for its directory')
  | dashworthy/pest-plugin-arch-rails: coverage.
  |
  | Every class has a test at its mirrored path. Most classes need a database,
- | so src mirrors into tests/Feature; the plain Data and Normalizers layers
- | mirror into tests/Unit, because the longest matching source root wins.
+ | so src mirrors into tests/Feature; the plain Attributes, Data and
+ | Normalizers layers mirror into tests/Unit, because the longest matching
+ | source root wins.
  | Abstract classes, interfaces, traits and enums are skipped, so enums only
  | declare cases and any behaviour lives in a class that has a test.
  |
@@ -101,6 +103,7 @@ arch('every class has a test at its mirrored path')
     ->expect('Dashworthy\ApiFilters')
     ->toHaveTests([
         $sourceRoot => $testRoot.'/Feature',
+        $sourceRoot.'/Attributes' => $testRoot.'/Unit/Attributes',
         $sourceRoot.'/Data' => $testRoot.'/Unit/Data',
         $sourceRoot.'/Normalizers' => $testRoot.'/Unit/Normalizers',
     ]);

@@ -84,6 +84,26 @@ public function index(Request $request)
 
 Filters never widen the constraints you apply first. Each filter set runs inside its own bracketed group, so an `or` set cannot return another team's rows. The whole input is validated before anything is applied, so a rejected request leaves the query as it was.
 
+### Choosing the columns clients can use
+
+By default a client can filter and sort by any column of the model's table that the model does not hide with `$hidden` or `$visible`. To expose only some columns, list them with the `#[Filterable]` attribute:
+
+```php
+use Dashworthy\ApiFilters\Attributes\Filterable;
+
+#[Filterable(['id', 'status', 'total', 'placed_at', 'created_at'])]
+class Order extends Model
+{
+}
+```
+
+- Only the listed columns can be filtered or sorted, matched in any letter case. Any other field gets the usual 422.
+- The key and timestamps are not added for you. List `id` or `created_at` if clients filter or sort by them.
+- `$hidden` and `$visible` still win, so a listed column the model hides stays out of reach.
+- A related model's `#[Filterable]` decides which of its columns a [relation path](#filtering-through-relations) can reach.
+- The attribute can sit on the model, on one of its traits or on a parent class, like Laravel's `#[Hidden]`.
+- With the attribute, the package does not read the table to find the model's columns. List real columns only: a listed name that is not a column fails when the query runs.
+
 ### Operators
 
 These operators ship with the package. You can [add your own](#adding-your-own-operators).
@@ -112,7 +132,7 @@ ApiFilters::for($query)->allowedRelations(['customer', 'lineItems.product'])->fi
 - **Paths.** Write a path as the model's relation method names joined by dots. A path also allows each shorter path it starts with, so `lineItems.product` allows `lineItems` as well.
 - **Spelling.** Clients may write a segment in snake_case: `line_items.quantity` matches `lineItems`.
 - **Matching.** `customer.name equals Ada` matches the orders with at least one related row where the condition holds. Two filters on the same relation match on their own, so each can be met by a different related row.
-- **Related columns** follow the related model's rules. A hidden column of `Customer` is rejected with the same message as an unknown one.
+- **Related columns** follow the related model's rules: its `#[Filterable]` list, or else its visible columns. A hidden column of `Customer` is rejected with the same message as an unknown one.
 - **`doesntHave`** takes a relation path as its field and matches the rows with no related row: `{ "field": "lineItems", "filter_operator": "doesntHave", "value": null }`.
 - **Declared relations only.** Every segment must be a public method that declares an Eloquent relation as its return type, such as `public function customer(): BelongsTo`. `allowedRelations()` checks each one before any input is read, and throws a `LogicException` otherwise. A relation method without a return type needs one first.
 
@@ -127,7 +147,7 @@ ApiFilters::for($query)->allowedRelations(['customer'])->sort($sorts);
 ```
 
 - **Format.** Each sort is `{ "field": "total", "sort_operator": "desc" }`, with `asc`, `desc` or `none`. Sorts apply in order, so a later one only breaks ties, and `none` is skipped.
-- **Fields** follow the filter rules: a visible column of the model, or a dotted field through an allow-listed path. Every rejected field gets the same message.
+- **Fields** follow the filter rules: a [column the model exposes](#choosing-the-columns-clients-can-use), or a dotted field through an allow-listed path. Every rejected field gets the same message.
 - **To-one paths only.** Each segment must be a belongs-to, has-one, morph-one or has-one-through relation, so `customer.country.name` works and `lineItems.quantity` is rejected.
 - **Joins.** A relation sort uses [power joins](https://github.com/kirschbaum-development/eloquent-power-joins)' `orderByLeftPowerJoins()`. It is a left join, so a row without a related row stays and sorts as NULL. The join adds the related table to the query, so qualify your own `where` columns, such as `orders.team_id`, when the related table has a column of the same name. Each join follows a foreign key, so index the keys on the paths you allow, such as `orders.customer_id`.
 
@@ -252,7 +272,7 @@ A client can then send `{ "field": "location", "filter_operator": "withinPolygon
 
 The package does the risky parts before `handle()` runs:
 
-- `$filterData->column` is a visible column of the model, already checked and qualified with its table.
+- `$filterData->column` is a column the model exposes, already checked and qualified with its table.
 - The value has passed `rules()`. `scalarValue()`, `stringValue()` and `listValue()` read it back with a type.
 - The condition lands in a group of the filter's own, joined to its set by the set's `and` or `or`, inside the set's group. Even an `orWhere()` in it cannot widen the constraints you applied first.
 - For a relation field such as `customer.location`, `handle()` runs inside the relation's `has()` query with the column qualified for the related table, so an operation needs no relation code.
@@ -261,8 +281,8 @@ The rest is up to you. Bind every value, as the `?` in `whereRaw()` does above, 
 
 ### What a client can and cannot reach
 
-- **Columns.** A field must be a real column of the model's table, matched in any letter case, that the model does not hide (`$hidden`, or missing from a non-empty `$visible`). Fields such as `password` and `remember_token` cannot be filtered.
-- **Every visible column is filterable.** `$hidden` and `$visible` are the boundary. A column you forget to hide can be probed one character at a time, for example with `password startsWith $2y$10$a`, so hide anything a client must not search.
+- **Columns.** A field must be a column the model exposes, matched in any letter case: one its `#[Filterable]` attribute lists or, without the attribute, any column of its table. Either way, a column the model hides (`$hidden`, or missing from a non-empty `$visible`) is out of reach, so `password` and `remember_token` cannot be filtered.
+- **Without `#[Filterable]`, every visible column is filterable.** `$hidden` and `$visible` are then the boundary. A column you forget to hide can be probed one character at a time, for example with `password startsWith $2y$10$a`. Hide anything a client must not search, or list the safe columns with `#[Filterable]`.
 - **Relations.** A dotted field works only through a path you allow-list. Clients never choose which method is called on your model.
 - **Mistakes.** An unknown operator, a bad value or a field that cannot be used returns a 422 validation error keyed by its input path, for example `filter_sets.0.filters.1.field`. An unknown column and a hidden one get the same message.
 
@@ -283,12 +303,12 @@ Every limit can be changed in `config/api-filters.php`:
 | Threat | What the package does |
 |---|---|
 | A client's relation name calls a model method: `truncate.id` empties the table | A relation path is only looked up in your allow-list, and each listed segment was checked to be a relation method before it was ever called |
-| A client probes a column, such as `password startsWith $2y$10$a` | Only visible columns can be filtered or sorted, named by a plain identifier that exists in the table |
+| A client probes a column, such as `password startsWith $2y$10$a` | Only the columns a model exposes can be filtered or sorted: the ones `#[Filterable]` lists, or else the columns of its table. Hidden columns never can, and a field must be a plain identifier |
 | An `or` set returns other teams' rows | Each set, and each filter inside it, runs in a where group of its own |
 | Input too large to run cheaply | Limits on filter sets, filters, `in` values, sorts and the window |
 | An unknown operator is ignored, returning every row | An operator that no operation handles is a 422 |
 | A value of the wrong type, such as `in` with a string | Every value is checked against its operation's rules before anything is applied |
-| `%` and `_` in a pattern are LIKE wildcards | They are wildcards by design. They only reach visible columns, and the limits cap how many patterns one request sends |
+| `%` and `_` in a pattern are LIKE wildcards | They are wildcards by design. They only reach exposed columns, and the limits cap how many patterns one request sends |
 
 ## Testing
 

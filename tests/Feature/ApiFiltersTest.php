@@ -9,6 +9,8 @@ use Dashworthy\ApiFilters\FilterOperations\Equality\Equals;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Workbench\App\Models\Customer;
+use Workbench\App\Models\ListedOrder;
 use Workbench\App\Models\Order;
 
 mutates(ApiFilters::class);
@@ -271,6 +273,32 @@ describe('apps add their own operations', function () use ($codes, $filter, $set
 
         ApiFilters::for(Order::query())->filter([$set('and', $filter('status', 'equals', 'open'))]);
     })->throws(LogicException::class, 'Every entry in api-filters.operations must implement Dashworthy\ApiFilters\Contracts\FilterOperationContract.');
+});
+
+describe('models that list their columns with #[Filterable]', function () use ($filter, $set) {
+    it('sorts only by the columns the model lists', function () {
+        Order::factory()->createMany([['code' => 'small', 'total' => 50], ['code' => 'large', 'total' => 500]]);
+
+        expect(ApiFilters::for(ListedOrder::query())->sort([['field' => 'total', 'sort_operator' => 'desc']])->query()->pluck('code')->all())
+            ->toBe(['large', 'small'])
+            ->and(fn () => ApiFilters::for(ListedOrder::query())->sort([['field' => 'notes', 'sort_operator' => 'asc']]))
+            ->toThrow(ValidationException::class, 'This field cannot be sorted.');
+    });
+
+    it('filters through a relation only by the columns the related model lists', function () use ($filter, $set) {
+        Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
+        Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
+        $codes = fn (array $filter): array => ApiFilters::for(ListedOrder::query())
+            ->allowedRelations(['customer'])
+            ->filter([$set('and', $filter)])
+            ->query()
+            ->pluck('code')
+            ->all();
+
+        expect($codes($filter('customer.name', 'equals', 'Ada')))->toBe(['ada'])
+            ->and(fn () => $codes($filter('customer.email', 'equals', 'ada@example.com')))
+            ->toThrow(ValidationException::class, 'This field cannot be filtered.');
+    });
 });
 
 describe('sorts', function () {
