@@ -19,8 +19,6 @@ use Dashworthy\ApiFilters\FilterOperations\Text\Contains;
 use Dashworthy\ApiFilters\FilterOperations\Text\DoesNotContain;
 use Dashworthy\ApiFilters\FilterOperations\Text\EndsWith;
 use Dashworthy\ApiFilters\FilterOperations\Text\StartsWith;
-use Dashworthy\ApiFilters\Normalizers\BooleanNormalizer;
-use Dashworthy\ApiFilters\Normalizers\NullNormalizer;
 
 return [
 
@@ -56,24 +54,6 @@ return [
         DateBefore::class,
         DateAfter::class,
         DoesntHave::class,
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Value Normalizers
-    |--------------------------------------------------------------------------
-    |
-    | Every filter value runs through these classes in order before it is
-    | checked against its operation's rules, element by element for an in
-    | or notIn list, each handing its result to the next. Each implements
-    | Dashworthy\ApiFilters\Contracts\NormalizerContract. An empty list
-    | compares every value exactly as the client sent it.
-    |
-    */
-
-    'normalizers' => [
-        BooleanNormalizer::class,
-        NullNormalizer::class,
     ],
 
     /*

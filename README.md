@@ -135,7 +135,7 @@ These operators ship with the package. You can [add your own](#adding-your-own-o
 | `dateIs`, `dateIsNot`, `dateBefore`, `dateAfter` | the date part of the column, at any time of day | `YYYY-MM-DD` |
 | `doesntHave` | rows with no related row through the field, which is a [relation path](#filtering-through-relations) | ignored |
 
-The strings `true` and `on`, `false` and `off`, and `null` are read as `true`, `false` and `null`, element by element in a list. Every other string, numeric ones included, is compared as sent, so `"007"` never matches `7`. The `normalizers` key in `config/api-filters.php` lists the classes that do this. Each implements `Dashworthy\ApiFilters\Contracts\NormalizerContract` and hands its result to `$next`; an empty list switches them off.
+The strings `true` and `on`, `false` and `off`, and `null` are read as `true`, `false` and `null`, element by element in a list. Every other string, numeric ones included, is compared as sent, so `"007"` never matches `7`.
 
 ### Filtering through relations
 

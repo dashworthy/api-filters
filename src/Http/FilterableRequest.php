@@ -6,25 +6,22 @@ namespace Dashworthy\ApiFilters\Http;
 
 use Closure;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
-use Dashworthy\ApiFilters\Contracts\NormalizerContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Enums\FilterSetOperator;
 use Dashworthy\ApiFilters\Enums\SortOperator;
 use Dashworthy\ApiFilters\Filtering\FilterApplier;
-use Illuminate\Container\Container;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use LogicException;
 
 /**
  * The request an endpoint takes filter_sets and sorts through. It checks their
  * shape and limits, that an operation handles each filter's operator, and each
- * value against the rules of the operations that handle it, once the
- * normalizers have read it. apiFiltersAndSorts() then checks each field
- * against the query model's #[Filterable]. Extend it and add authorize().
+ * value against the rules of the operations that handle it.
+ * apiFiltersAndSorts() then checks each field against the query model's
+ * #[Filterable]. Extend it and add authorize().
  */
 abstract class FilterableRequest extends FormRequest
 {
@@ -95,8 +92,9 @@ abstract class FilterableRequest extends FormRequest
     }
 
     /**
-     * Read each value, or each element of a list value, through the
-     * normalizers, so the rules check what the operations will receive.
+     * Read the strings true and on as true, false and off as false, and null
+     * as null, in each value or each element of a list value, so the rules
+     * check what the operations will receive.
      */
     protected function prepareForValidation(): void
     {
@@ -106,12 +104,10 @@ abstract class FilterableRequest extends FormRequest
             return;
         }
 
-        $normalize = self::normalizer();
-
         foreach ($filterSets as $setIndex => $set) {
             foreach (is_array($set) && is_array($set['filters'] ?? null) ? $set['filters'] : [] as $filterIndex => $filter) {
                 if (is_array($filter) && array_key_exists('value', $filter)) {
-                    data_set($filterSets, "{$setIndex}.filters.{$filterIndex}.value", is_array($filter['value']) ? array_map($normalize, $filter['value']) : $normalize($filter['value']));
+                    data_set($filterSets, "{$setIndex}.filters.{$filterIndex}.value", is_array($filter['value']) ? array_map(self::normalize(...), $filter['value']) : self::normalize($filter['value']));
                 }
             }
         }
@@ -136,26 +132,14 @@ abstract class FilterableRequest extends FormRequest
         ));
     }
 
-    /**
-     * The normalizers api-filters.normalizers lists, chained in order.
-     *
-     * @return Closure(mixed): mixed
-     */
-    private static function normalizer(): Closure
+    private static function normalize(mixed $value): mixed
     {
-        $pipeline = fn (mixed $value): mixed => $value;
-
-        foreach (array_reverse(array_values(Config::array('api-filters.normalizers'))) as $class) {
-            $normalizer = is_string($class) ? Container::getInstance()->make($class) : $class;
-
-            if (! $normalizer instanceof NormalizerContract) {
-                throw new LogicException('Every entry in api-filters.normalizers must implement '.NormalizerContract::class.'.');
-            }
-
-            $pipeline = fn (mixed $value): mixed => $normalizer->handle($value, $pipeline);
-        }
-
-        return $pipeline;
+        return match ($value) {
+            'true', 'on' => true,
+            'false', 'off' => false,
+            'null' => null,
+            default => $value,
+        };
     }
 
     private static function limit(string $name): int

@@ -5,7 +5,6 @@ declare(strict_types=1);
 use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\ApiFiltersServiceProvider;
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
-use Dashworthy\ApiFilters\Contracts\NormalizerContract;
 use Illuminate\Foundation\Http\FormRequest;
 
 arch()->preset()->php();
@@ -41,7 +40,6 @@ arch('every class keeps to the approved directories')
         'Enums' => UnitEnum::class,
         'FilterOperations' => FilterOperationContract::class,
         'Filtering',
-        'Normalizers' => NormalizerContract::class,
         'Relations',
         'Sorting',
         'Http' => FormRequest::class,
@@ -73,7 +71,6 @@ arch('every class is named for its directory')
         'Contracts' => 'Contract',
         'Data' => 'Data',
         'Filtering' => 'Applier',
-        'Normalizers' => 'Normalizer',
         'Relations' => 'AllowList',
         'Sorting' => 'Applier',
         'Http' => 'Request',
@@ -83,9 +80,8 @@ arch('every class is named for its directory')
  | dashworthy/pest-plugin-arch-rails: coverage.
  |
  | Every class has a test at its mirrored path. Most classes need a database,
- | so src mirrors into tests/Feature; the plain Attributes, Data and
- | Normalizers layers mirror into tests/Unit, because the longest matching
- | source root wins.
+ | so src mirrors into tests/Feature; the plain Attributes and Data layers
+ | mirror into tests/Unit, because the longest matching source root wins.
  | Abstract classes, interfaces, traits and enums are skipped, so enums only
  | declare cases and any behaviour lives in a class that has a test.
  |
@@ -101,5 +97,4 @@ arch('every class has a test at its mirrored path')
         $sourceRoot => $testRoot.'/Feature',
         $sourceRoot.'/Attributes' => $testRoot.'/Unit/Attributes',
         $sourceRoot.'/Data' => $testRoot.'/Unit/Data',
-        $sourceRoot.'/Normalizers' => $testRoot.'/Unit/Normalizers',
     ]);

@@ -142,13 +142,6 @@ describe('string tokens are normalized', function () use ($codes, $filter, $set)
 
         expect($codes([$set('and', $filter('code', 'equals', '007'))]))->toBe(['007']);
     });
-
-    it('can switch normalizers off', function () use ($codes, $filter, $set) {
-        config()->set('api-filters.normalizers', []);
-        Order::factory()->createMany([['code' => 'text', 'notes' => 'null'], ['code' => 'none', 'notes' => null]]);
-
-        expect($codes([$set('and', $filter('notes', 'equals', 'null'))]))->toBe(['text']);
-    });
 });
 
 describe('apps add their own operations', function () use ($codes, $filter, $set) {

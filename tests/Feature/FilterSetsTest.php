@@ -283,9 +283,3 @@ describe('relations', function () use ($errors, $filter, $set, $sql) {
             ->toBe(['filter_sets.0.filters.0.field' => ['This field cannot be filtered.']]);
     });
 });
-
-it('rejects a normalizer that does not implement the contract', function () use ($errors, $filter, $set) {
-    config()->set('api-filters.normalizers', [stdClass::class]);
-
-    $errors([$set($filter('status', 'equals', 'open'))]);
-})->throws(LogicException::class, 'Every entry in api-filters.normalizers must implement Dashworthy\ApiFilters\Contracts\NormalizerContract.');

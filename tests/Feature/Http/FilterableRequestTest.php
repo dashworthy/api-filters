@@ -41,6 +41,20 @@ describe('the request checks what the operations decide, before the controller r
             ->assertJsonPath('filter_sets.0.filters.0.value', [null, 'rush']);
     });
 
+    it('reads the strings true, on, false, off and null as true, false and null', function (string $token, ?bool $value) use ($oneFilter) {
+        expect(filterableRequest($oneFilter('notes', 'equals', $token))->filterSets()[0]['filters'][0]['value'])->toBe($value);
+    })->with([
+        'true' => ['true', true],
+        'on' => ['on', true],
+        'false' => ['false', false],
+        'off' => ['off', false],
+        'null' => ['null', null],
+    ]);
+
+    it('leaves every other string as sent', function (string $value) use ($oneFilter) {
+        expect(filterableRequest($oneFilter('notes', 'equals', $value))->filterSets()[0]['filters'][0]['value'])->toBe($value);
+    })->with(['TRUE', 'NULL', 'yes', '1', '0', '']);
+
     it('leaves the field to the engine, which knows the model', function () use ($oneFilter) {
         $this->json('GET', 'validated', $oneFilter('nope', 'equals', 'x'))->assertOk();
 
