@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
-use Dashworthy\ApiFilters\Filtering\FilterApplier;
 use Dashworthy\ApiFilters\Http\FilterableRequest;
 use Dashworthy\ApiFilters\Tests\TestCase;
 use Illuminate\Database\Eloquent\Builder;
@@ -30,14 +29,6 @@ function codesMatching(FilterOperationContract $operation, string $operator, str
     $query->where(fn (Builder $group) => $operation->handle($group, $filterData));
 
     return $query->orderBy('code')->pluck('code')->all();
-}
-
-/**
- * The applier ApiFilters builds, with the configured operations.
- */
-function filterApplier(): FilterApplier
-{
-    return FilterApplier::fromConfig();
 }
 
 /**

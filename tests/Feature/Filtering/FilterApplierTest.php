@@ -69,7 +69,7 @@ $either = new class implements FilterOperationContract
 };
 
 it('finds the built-in operation for each operator', function (string $operator, string $operation) {
-    expect(filterApplier()->operationsFor(new FilterData('orders.notes', $operator)))
+    expect(FilterApplier::fromConfig()->operationsFor(new FilterData('orders.notes', $operator)))
         ->toHaveCount(1)
         ->sequence(fn ($found) => $found->toBeInstanceOf($operation));
 })->with([
@@ -93,7 +93,7 @@ it('finds the built-in operation for each operator', function (string $operator,
 ]);
 
 it('finds no operation for an operator none can handle', function () {
-    expect(filterApplier()->operationsFor(new FilterData('orders.total', 'between', [1, 2])))->toBe([]);
+    expect(FilterApplier::fromConfig()->operationsFor(new FilterData('orders.total', 'between', [1, 2])))->toBe([]);
 });
 
 it('finds every operation that can handle a filter, in order', function () {
@@ -139,7 +139,7 @@ it('applies every operation that can handle a filter', function () {
 });
 
 it('refuses a filter no operation can handle', function () {
-    filterApplier()->apply(Order::query(), new FilterData('orders.total', 'between', [1, 2]), FilterSetOperator::And);
+    FilterApplier::fromConfig()->apply(Order::query(), new FilterData('orders.total', 'between', [1, 2]), FilterSetOperator::And);
 })->throws(LogicException::class, 'No api-filters operation can handle the [between] operator.');
 
 it('joins each filter with its set operator', function () {
@@ -148,7 +148,7 @@ it('joins each filter with its set operator', function () {
         ['code' => 'closed', 'status' => 'closed', 'total' => 500],
         ['code' => 'void', 'status' => 'void', 'total' => 50],
     ]);
-    $applier = filterApplier();
+    $applier = FilterApplier::fromConfig();
     $query = Order::query();
 
     $query->where(function (Builder $group) use ($applier) {
