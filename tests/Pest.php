@@ -6,9 +6,11 @@ use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Enums\FilterOperator;
 use Dashworthy\ApiFilters\Filtering\FilterApplier;
+use Dashworthy\ApiFilters\Http\FilterableRequest;
 use Dashworthy\ApiFilters\Tests\TestCase;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Workbench\App\Models\Order;
 
 uses(TestCase::class)->in(__DIR__);
@@ -37,6 +39,20 @@ function codesMatching(FilterOperationContract $operation, FilterOperator $opera
 function filterApplier(): FilterApplier
 {
     return FilterApplier::fromConfig();
+}
+
+/**
+ * A FilterableRequest that has validated the input, as a controller receives
+ * it.
+ *
+ * @param  array<string, mixed>  $input
+ */
+function filterableRequest(array $input): FilterableRequest
+{
+    $request = FilterableRequest::createFrom(Request::create('/', 'GET', $input), new class extends FilterableRequest {});
+    $request->setContainer(app())->setRedirector(app('redirect'))->validateResolved();
+
+    return $request;
 }
 
 /**

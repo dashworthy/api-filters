@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 use Kirschbaum\PowerJoins\PowerJoinsServiceProvider;
-use LogicException;
 
 class ApiFiltersServiceProvider extends ServiceProvider
 {
@@ -32,28 +31,9 @@ class ApiFiltersServiceProvider extends ServiceProvider
     {
         $this->loadTranslationsFrom(__DIR__.'/../lang', 'api-filters');
 
-        $paths = fn (array $paths): array => array_map(
-            fn (mixed $path): string => is_string($path) ? $path : throw new LogicException('Every allowed relation path must be a string.'),
-            array_values($paths),
-        );
-
-        Builder::macro('apiFilters', function (mixed $filterSets, array $allowedRelations = []) use ($paths): Builder {
-            /** @var Builder<Model> $this */
-            return ApiFilters::for($this)->allowedRelations($paths($allowedRelations))->filter($filterSets)->query();
-        });
-
-        Builder::macro('apiSorts', function (mixed $sorts, array $allowedRelations = []) use ($paths): Builder {
-            /** @var Builder<Model> $this */
-            return ApiFilters::for($this)->allowedRelations($paths($allowedRelations))->sort($sorts)->query();
-        });
-
         Builder::macro('apiFiltersAndSorts', function (FilterableRequest $request): Builder {
             /** @var Builder<Model> $this */
-            return ApiFilters::for($this)
-                ->allowedRelations($request->allowedRelations())
-                ->filter($request->validated('filter_sets', []))
-                ->sort($request->validated('sorts', []))
-                ->query();
+            return ApiFilters::for($this)->apply($request)->query();
         });
 
         if (! $this->app->runningInConsole()) {

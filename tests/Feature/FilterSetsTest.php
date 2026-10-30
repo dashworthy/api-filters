@@ -7,19 +7,22 @@ use Dashworthy\ApiFilters\Contracts\FilterOperationContract;
 use Dashworthy\ApiFilters\Data\FilterData;
 use Dashworthy\ApiFilters\Http\FilterableRequest;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
+use Workbench\App\Models\Customer;
+use Workbench\App\Models\ListedOrder;
 use Workbench\App\Models\Order;
 
 mutates(FilterableRequest::class, ApiFilters::class);
 
 /*
- | $errors applies filter sets to an orders query and returns the validation
- | errors, keyed by input path. $sql returns the SQL they make of the query.
- | $set and $filter build the wire format.
+ | $errors applies filter sets to a query on the model, an order unless named,
+ | and returns the validation errors, keyed by input path. $sql returns the
+ | SQL they make of an orders query. $set and $filter build the wire format.
  */
-$errors = function (mixed $filterSets, array $allowedRelations = []): array {
+$errors = function (mixed $filterSets, ?Model $model = null): array {
     try {
-        ApiFilters::for(Order::query())->allowedRelations($allowedRelations)->filter($filterSets);
+        ApiFilters::for(($model ?? new Order)->newQuery())->apply(filterableRequest(['filter_sets' => $filterSets]));
     } catch (ValidationException $exception) {
         return $exception->errors();
     }
@@ -27,9 +30,8 @@ $errors = function (mixed $filterSets, array $allowedRelations = []): array {
     return [];
 };
 
-$sql = fn (array $filterSets, array $allowedRelations = []): string => ApiFilters::for(Order::query())
-    ->allowedRelations($allowedRelations)
-    ->filter($filterSets)
+$sql = fn (array $filterSets): string => ApiFilters::for(Order::query())
+    ->apply(filterableRequest(['filter_sets' => $filterSets]))
     ->query()
     ->toRawSql();
 
@@ -201,7 +203,7 @@ describe('input size is limited', function () use ($errors, $filter, $set) {
     });
 
     it('reads limits from configuration', function () use ($errors, $filter, $set) {
-        config()->set('api-filters.limits', ['filter_sets' => 1, 'filters' => 1, 'in_values' => 1]);
+        config()->set(['api-filters.limits.filter_sets' => 1, 'api-filters.limits.filters' => 1, 'api-filters.limits.in_values' => 1]);
 
         expect(array_keys($errors([$set($filter('status', 'equals', 'open')), $set($filter('status', 'equals', 'open'))])))->toBe(['filter_sets'])
             ->and(array_keys($errors([$set($filter('status', 'equals', 'open'), $filter('status', 'equals', 'open'))])))->toBe(['filter_sets'])
@@ -246,38 +248,38 @@ describe('malformed input is rejected before any query runs', function () use ($
 });
 
 describe('relation paths are denied by default', function () use ($errors, $filter, $set) {
-    it('rejects a relation field without an allow-list', function () use ($errors, $filter, $set) {
-        expect($errors([$set($filter('customer.name', 'equals', 'Ada'))]))
+    it('rejects a relation the model does not list', function () use ($errors, $filter, $set) {
+        expect($errors([$set($filter('country.name', 'equals', 'Iceland'))], new Customer))
             ->toBe(['filter_sets.0.filters.0.field' => ['This field cannot be filtered.']]);
     });
 });
 
 describe('relations', function () use ($errors, $filter, $set, $sql) {
     it('filters through the developer\'s path by the related model\'s spelling of a column', function () use ($filter, $sql) {
-        expect($sql([['filter_set_operator' => 'and', 'filters' => [$filter('line_items.product.SKU', 'equals', 'SKU-1'), $filter('line_items', 'doesntHave', null)]]], ['lineItems.product']))
+        expect($sql([['filter_set_operator' => 'and', 'filters' => [$filter('line_items.product.SKU', 'equals', 'SKU-1'), $filter('line_items', 'doesntHave', null)]]]))
             ->toContain("`products`.`sku` = 'SKU-1'")
             ->toContain('not exists (select * from `line_items`');
     });
 
     it('keeps other relations denied', function () use ($errors, $filter, $set) {
-        expect($errors([$set($filter('customer.name', 'equals', 'Ada'))], ['lineItems']))
+        expect($errors([$set($filter('line_items.quantity', 'gt', 1))], new ListedOrder))
             ->toBe(['filter_sets.0.filters.0.field' => ['This field cannot be filtered.']]);
     });
 
     it('rejects a hidden related column', function () use ($errors, $filter, $set) {
-        expect(array_keys($errors([$set($filter('customer.password', 'startsWith', '$2y$'))], ['customer'])))
+        expect(array_keys($errors([$set($filter('customer.password', 'startsWith', '$2y$'))])))
             ->toBe(['filter_sets.0.filters.0.field']);
     });
 
     it('uses one message for hidden and unknown related columns', function () use ($errors, $filter, $set) {
-        expect($errors([$set($filter('customer.password', 'equals', 'x'))], ['customer']))
+        expect($errors([$set($filter('customer.password', 'equals', 'x'))]))
             ->toBe(['filter_sets.0.filters.0.field' => ['This field cannot be filtered.']])
-            ->and($errors([$set($filter('customer.nope', 'equals', 'x'))], ['customer']))
-            ->toBe($errors([$set($filter('customer.password', 'equals', 'x'))], ['customer']));
+            ->and($errors([$set($filter('customer.nope', 'equals', 'x'))]))
+            ->toBe($errors([$set($filter('customer.password', 'equals', 'x'))]));
     });
 
-    it('rejects a doesnt have path that is not allow-listed', function () use ($errors, $filter, $set) {
-        expect($errors([$set($filter('lineItems', 'doesntHave', null))]))
+    it('rejects a doesnt have path the model does not list', function () use ($errors, $filter, $set) {
+        expect($errors([$set($filter('country', 'doesntHave', null))], new Customer))
             ->toBe(['filter_sets.0.filters.0.field' => ['This field cannot be filtered.']]);
     });
 });

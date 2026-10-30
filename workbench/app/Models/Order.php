@@ -13,7 +13,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Workbench\Database\Factories\OrderFactory;
 
-#[Filterable(['status', 'total', 'notes', 'code', 'is_priority', 'placed_at', 'location'])]
+#[Filterable(
+    columns: ['status', 'total', 'notes', 'code', 'is_priority', 'placed_at', 'location'],
+    relations: ['customer.country', 'lineItems.product', 'products'],
+)]
 #[Hidden(['internal_reference'])]
 #[Unguarded]
 #[UseFactory(OrderFactory::class)]

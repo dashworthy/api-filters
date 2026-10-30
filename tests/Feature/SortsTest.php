@@ -6,18 +6,19 @@ use Dashworthy\ApiFilters\ApiFilters;
 use Dashworthy\ApiFilters\Http\FilterableRequest;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
+use Workbench\App\Models\Customer;
 use Workbench\App\Models\Order;
 use Workbench\App\Models\User;
 
 mutates(FilterableRequest::class, ApiFilters::class);
 
 /*
- | $errors sorts a query with an allow-list and returns the validation
- | errors, keyed by input path. $sort builds the wire format.
+ | $errors sorts a query on the model, an order unless named, and returns the
+ | validation errors, keyed by input path. $sort builds the wire format.
  */
-$errors = function (mixed $sorts, array $allowedRelations = [], ?Model $model = null): array {
+$errors = function (mixed $sorts, ?Model $model = null): array {
     try {
-        ApiFilters::for(($model ?? new Order)->newQuery())->allowedRelations($allowedRelations)->sort($sorts);
+        ApiFilters::for(($model ?? new Order)->newQuery())->apply(filterableRequest(['sorts' => $sorts]));
     } catch (ValidationException $exception) {
         return $exception->errors();
     }
@@ -28,34 +29,34 @@ $errors = function (mixed $sorts, array $allowedRelations = [], ?Model $model = 
 $sort = fn (string $field, string $operator = 'asc'): array => ['field' => $field, 'sort_operator' => $operator];
 
 it('sorts by the qualified column and the developer\'s path, spelled as the models list them', function () use ($sort) {
-    expect(ApiFilters::for(Order::query())->allowedRelations(['customer'])->sort([$sort('TOTAL', 'desc'), $sort('customer.NAME')])->query()->toRawSql())
+    expect(ApiFilters::for(Order::query())->apply(filterableRequest(['sorts' => [$sort('TOTAL', 'desc'), $sort('customer.NAME')]]))->query()->toRawSql())
         ->toContain('order by `orders`.`total` desc, `customers`.`name` asc');
 });
 
 it('accepts a nested to one path', function () use ($errors, $sort) {
-    expect($errors([$sort('customer.country.name')], ['customer.country']))->toBe([]);
+    expect($errors([$sort('customer.country.name')]))->toBe([]);
 });
 
 describe('only visible columns can be sorted', function () use ($errors, $sort) {
     it('rejects a hidden column', function () use ($errors, $sort) {
-        expect(array_keys($errors([$sort('password')], [], new User)))->toBe(['sorts.0.field']);
+        expect(array_keys($errors([$sort('password')], new User)))->toBe(['sorts.0.field']);
     });
 
     it('uses one message for unknown and hidden columns', function () use ($errors, $sort) {
-        expect($errors([$sort('password')], [], new User))->toBe(['sorts.0.field' => ['This field cannot be sorted.']])
-            ->and($errors([$sort('nope')], [], new User))->toBe($errors([$sort('password')], [], new User));
+        expect($errors([$sort('password')], new User))->toBe(['sorts.0.field' => ['This field cannot be sorted.']])
+            ->and($errors([$sort('nope')], new User))->toBe($errors([$sort('password')], new User));
     });
 
-    it('rejects a relation that is not allow-listed', function () use ($errors, $sort) {
-        expect(array_keys($errors([$sort('customer.name')])))->toBe(['sorts.0.field']);
+    it('rejects a relation the model does not list', function () use ($errors, $sort) {
+        expect(array_keys($errors([$sort('country.name')], new Customer)))->toBe(['sorts.0.field']);
     });
 
     it('rejects a to many path', function () use ($errors, $sort) {
-        expect($errors([$sort('lineItems.quantity')], ['lineItems']))->toBe(['sorts.0.field' => ['This field cannot be sorted.']]);
+        expect($errors([$sort('lineItems.quantity')]))->toBe(['sorts.0.field' => ['This field cannot be sorted.']]);
     });
 
     it('rejects a hidden related column', function () use ($errors, $sort) {
-        expect(array_keys($errors([$sort('customer.password')], ['customer'])))->toBe(['sorts.0.field']);
+        expect(array_keys($errors([$sort('customer.password')])))->toBe(['sorts.0.field']);
     });
 });
 

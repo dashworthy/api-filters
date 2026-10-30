@@ -34,12 +34,11 @@ use Workbench\App\Models\Product;
 mutates(FilterApplier::class);
 
 /*
- | $codes filters an orders query through the engine, with an allow-list, and
- | returns the matching orders' codes. $filter builds the wire format.
+ | $codes filters an orders query through the engine and returns the matching
+ | orders' codes. $filter builds the wire format.
  */
-$codes = fn (array $allowedRelations, string $setOperator, array $filters, ?Builder $query = null): array => ApiFilters::for($query ?? Order::query())
-    ->allowedRelations($allowedRelations)
-    ->filter([['filter_set_operator' => $setOperator, 'filters' => $filters]])
+$codes = fn (string $setOperator, array $filters, ?Builder $query = null): array => ApiFilters::for($query ?? Order::query())
+    ->apply(filterableRequest(['filter_sets' => [['filter_set_operator' => $setOperator, 'filters' => $filters]]]))
     ->query()
     ->orderBy('code')
     ->pluck('code')
@@ -183,14 +182,14 @@ describe('relations', function () use ($codes, $filter) {
         Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
         Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
 
-        expect($codes(['customer'], 'and', [$filter('customer.name', 'equals', 'Ada')]))->toBe(['ada']);
+        expect($codes('and', [$filter('customer.name', 'equals', 'Ada')]))->toBe(['ada']);
     });
 
     it('filters through a nested path', function () use ($codes, $filter) {
         LineItem::factory()->for(Order::factory()->state(['code' => 'sku-1']))->for(Product::factory()->state(['sku' => 'SKU-1']))->create();
         LineItem::factory()->for(Order::factory()->state(['code' => 'sku-2']))->for(Product::factory()->state(['sku' => 'SKU-2']))->create();
 
-        expect($codes(['lineItems.product'], 'and', [$filter('lineItems.product.sku', 'equals', 'SKU-1')]))->toBe(['sku-1']);
+        expect($codes('and', [$filter('lineItems.product.sku', 'equals', 'SKU-1')]))->toBe(['sku-1']);
     });
 
     it('ors a relation filter with its set', function () use ($codes, $filter) {
@@ -198,7 +197,7 @@ describe('relations', function () use ($codes, $filter) {
         Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada-open', 'status' => 'open']);
         Order::factory()->for($grace)->createMany([['code' => 'grace-closed', 'status' => 'closed'], ['code' => 'grace-open', 'status' => 'open']]);
 
-        expect($codes(['customer'], 'or', [$filter('status', 'equals', 'closed'), $filter('customer.name', 'equals', 'Ada')]))
+        expect($codes('or', [$filter('status', 'equals', 'closed'), $filter('customer.name', 'equals', 'Ada')]))
             ->toBe(['ada-open', 'grace-closed']);
     });
 
@@ -206,7 +205,7 @@ describe('relations', function () use ($codes, $filter) {
         Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'team-1', 'team_id' => 1, 'status' => 'open']);
         Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'team-2', 'team_id' => 2, 'status' => 'closed']);
 
-        expect($codes(['customer'], 'or', [$filter('customer.name', 'equals', 'Ada'), $filter('status', 'equals', 'closed')], Order::query()->where('team_id', 1)))
+        expect($codes('or', [$filter('customer.name', 'equals', 'Ada'), $filter('status', 'equals', 'closed')], Order::query()->where('team_id', 1)))
             ->toBe(['team-1']);
     });
 
@@ -215,7 +214,7 @@ describe('relations', function () use ($codes, $filter) {
         LineItem::factory()->for(Order::factory()->state(['code' => 'with']))->for($product)->create();
         Order::factory()->create(['code' => 'without']);
 
-        expect($codes(['products'], 'and', [$filter('products.id', 'equals', $product->id)]))->toBe(['with']);
+        expect($codes('and', [$filter('products.id', 'equals', $product->id)]))->toBe(['with']);
     });
 });
 
@@ -224,7 +223,7 @@ describe('doesnt have', function () use ($codes, $filter) {
         LineItem::factory()->for(Order::factory()->state(['code' => 'items']))->create();
         Order::factory()->create(['code' => 'empty']);
 
-        expect($codes(['lineItems'], 'and', [$filter('lineItems', 'doesntHave', null)]))->toBe(['empty']);
+        expect($codes('and', [$filter('lineItems', 'doesntHave', null)]))->toBe(['empty']);
     });
 
     it('ors doesnt have with its set', function () use ($codes, $filter) {
@@ -232,7 +231,7 @@ describe('doesnt have', function () use ($codes, $filter) {
         LineItem::factory()->for(Order::factory()->state(['code' => 'closed-items', 'status' => 'closed']))->create();
         Order::factory()->create(['code' => 'open-empty', 'status' => 'open']);
 
-        expect($codes(['lineItems'], 'or', [$filter('status', 'equals', 'closed'), $filter('lineItems', 'doesntHave', null)]))
+        expect($codes('or', [$filter('status', 'equals', 'closed'), $filter('lineItems', 'doesntHave', null)]))
             ->toBe(['closed-items', 'open-empty']);
     });
 });

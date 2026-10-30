@@ -5,7 +5,6 @@ declare(strict_types=1);
 use Dashworthy\ApiFilters\Http\FilterableRequest;
 use Illuminate\Support\Facades\Route;
 use Workbench\App\Http\Requests\ListOrdersRequest;
-use Workbench\App\Http\Requests\ListOrdersWithoutRelationsRequest;
 use Workbench\App\Models\Customer;
 use Workbench\App\Models\Order;
 
@@ -13,7 +12,7 @@ mutates(FilterableRequest::class);
 
 beforeEach(function () {
     Route::get('orders', fn (ListOrdersRequest $request) => Order::query()->apiFiltersAndSorts($request)->pluck('code'));
-    Route::get('orders-without-relations', fn (ListOrdersWithoutRelationsRequest $request) => Order::query()->apiFiltersAndSorts($request)->pluck('code'));
+    Route::get('customers', fn (ListOrdersRequest $request) => Customer::query()->apiFiltersAndSorts($request)->pluck('name'));
     Route::get('validated', fn (ListOrdersRequest $request) => $request->validated());
 });
 
@@ -63,13 +62,13 @@ it('rejects too many sorts with the package message', function () {
         ->assertJsonValidationErrors(['sorts' => 'No more than 5 sorts may be sent.']);
 });
 
-it('denies relations by default', function () use ($customerIsAda) {
-    $this->json('GET', 'orders-without-relations', $customerIsAda)
+it('denies a relation the model does not list', function () use ($oneFilter) {
+    $this->json('GET', 'customers', $oneFilter('country.name', 'equals', 'Iceland'))
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['filter_sets.0.filters.0.field']);
 });
 
-it('honours the request\'s allow-list', function () use ($customerIsAda) {
+it('honours the relations the model lists', function () use ($customerIsAda) {
     Order::factory()->for(Customer::factory()->state(['name' => 'Ada']))->create(['code' => 'ada']);
     Order::factory()->for(Customer::factory()->state(['name' => 'Grace']))->create(['code' => 'grace']);
 

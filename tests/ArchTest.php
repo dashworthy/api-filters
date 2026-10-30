@@ -36,7 +36,6 @@ arch('every class keeps to the approved directories')
     ->expect('Dashworthy\ApiFilters')
     ->toUseApprovedDirectories([
         'Attributes' => fn (string $class): bool => (new ReflectionClass($class))->getAttributes(Attribute::class) !== [],
-        'Columns',
         'Contracts' => fn (string $class): bool => interface_exists($class),
         'Data' => fn (string $class): bool => (new ReflectionClass($class))->isReadOnly(),
         'Enums' => UnitEnum::class,
@@ -71,7 +70,6 @@ it('keeps only the entry points at the package root', function () {
 arch('every class is named for its directory')
     ->expect('Dashworthy\ApiFilters')
     ->toUseDirectorySuffixes([
-        'Columns' => 'Resolver',
         'Contracts' => 'Contract',
         'Data' => 'Data',
         'Filtering' => 'Applier',
